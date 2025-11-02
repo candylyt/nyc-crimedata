@@ -45,6 +45,7 @@ engine = create_engine(DATABASEURI)
 # Example of running queries in your database
 # Note that this will probably not work if you already have a table named 'test' in your database, containing meaningful data. This is only an example showing you how to run queries in your database using SQLAlchemy.
 #
+'''
 with engine.connect() as conn:
 	create_table_command = """
 	CREATE TABLE IF NOT EXISTS test (
@@ -57,7 +58,7 @@ with engine.connect() as conn:
 	res = conn.execute(text(insert_table_command))
 	# you need to commit for create, insert, update queries to reflect
 	conn.commit()
-
+'''
 
 @app.before_request
 def before_request():
@@ -119,11 +120,23 @@ def index():
 	#
 	# example of a database query
 	#
-	select_query = "SELECT name from test"
+	select_query = """
+	SELECT i.occurred_date, ct.crime_type, lc.category, ct.severity, i.status, j.description AS jurisdiction, a.borough, a.postal_code
+	FROM incident i 
+		JOIN address a ON i.address_id = a.address_id 
+		JOIN jurisdiction j ON i.jur_id = j.jur_id
+		JOIN classified_as ca ON i.incident_id = ca.incident_id
+		JOIN crimetype ct ON ca.crime_type_id = ct.crime_type_id
+		JOIN lawcategory lc ON lc.law_cat_id = ct.law_cat_id
+	LIMIT 10;
+	"""
 	cursor = g.conn.execute(text(select_query))
-	names = []
-	for result in cursor:
-		names.append(result[0])
+
+	rows = cursor.fetchall()
+	columns = cursor.keys()
+	# incidents = []
+	# for result in cursor:
+	# 	incidents.append(result[0])
 	cursor.close()
 
 	#
@@ -152,14 +165,15 @@ def index():
 	#     <div>{{n}}</div>
 	#     {% endfor %}
 	#
-	context = dict(data = names)
+	# context = dict(data = incidents)
 
 
 	#
 	# render_template looks in the templates/ folder for files.
 	# for example, the below file reads template/index.html
 	#
-	return render_template("index.html", **context)
+	# return render_template("index.html", **context)
+	return render_template("index.html", rows=rows, columns=columns)
 
 #
 # This is an example of a different path.  You can see it at:
