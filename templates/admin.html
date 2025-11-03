@@ -119,10 +119,6 @@
       gap: 6px;
       align-items: center;
     }
-    input[type="text"],
-    input[type="number"] {
-      padding: 6px 8px;
-    }
     button {
       padding: 6px 10px;
     }
@@ -133,15 +129,38 @@
     <div class="top-bar">
       <div class="title">NYC Crime Data</div>
       <div class="tabs">
-        <a href="{{ url_for('index') }}" class="active">General User</a>
-        <a href="{{ url_for('admin_index') }}">Administrator</a>
+        <a href="{{ url_for('index') }}">General User</a>
+        <a href="{{ url_for('admin_index') }}" class="active">Administrator</a>
       </div>
     </div>
 
-    <!-- FILTER FORM (method=GET) -->
-    <form class="filters" method="get" action="{{ url_for('index') }}">
+    <div style="display:flex; justify-content:flex-end; gap:10px; margin: 8px 0 12px;">
+      <a href="{{ url_for('admin_new_incident') }}"
+         style="text-decoration:none; border:1px solid #000; border-radius:4px; padding:6px 12px;">
+        ➕ Create Incident
+      </a>
+      <a href="{{ url_for('admin_system') }}"
+         style="text-decoration:none; border:1px solid #000; border-radius:4px; padding:6px 12px;">
+        ⚙️ System
+      </a>
+    </div>
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <style>
+          .flash { padding: 8px 12px; border-radius: 6px; margin: 10px 0; }
+          .flash.success { background:#eef9f0; border:1px solid #bfe3c6; color:#1a7f37; }
+          .flash.error   { background:#fff3f3; border:1px solid #f1c0c0; color:#b00020; }
+        </style>
+        {% for category, msg in messages %}
+          <div class="flash {{ category }}">{{ msg }}</div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
 
-      <!-- First Row -->
+
+
+    <!-- FILTER FORM (same as user, but action=/admin) -->
+    <form class="filters" method="get" action="{{ url_for('admin_index') }}">
       <div>
         <label>Law Category</label>
         <select name="lawcategory">
@@ -190,7 +209,6 @@
         </div>
       </fieldset>
 
-      <!-- Second Row -->
       <div>
         <label>Postal Code</label>
         <input type="text" name="postal_code" value="{{ request.args.get('postal_code','') }}" placeholder="e.g. 10027" />
@@ -208,7 +226,7 @@
 
       <div class="actions">
         <button type="submit">Apply Filters</button>
-        <a href="{{ url_for('index') }}">Clear</a>
+        <a href="{{ url_for('admin_index') }}">Clear</a>
       </div>
     </form>
 
@@ -216,16 +234,21 @@
       <thead>
         <tr>
           {% for col in columns %}
-          <th>{{ col }}</th>
+            <th>{{ col }}</th>
           {% endfor %}
+          <th>Action</th>
         </tr>
       </thead>
       <tbody>
         {% for row in rows %}
         <tr>
-          {% for cell in row %}
-          <td>{{ cell }}</td>
+          {# row[0] = incident_id, we don't show it #}
+          {% for cell in row[1:] %}
+            <td>{{ cell }}</td>
           {% endfor %}
+          <td>
+            <a href="{{ url_for('admin_incident_detail', incident_id=row[0]) }}">View details</a>
+          </td>
         </tr>
         {% endfor %}
       </tbody>
@@ -256,14 +279,5 @@
       <span>Last »</span>
       {% endif %}
     </div>
-
-    <p><a href="another">Go to the other page</a></p>
-
-    <form method="POST" action="/add">
-      <p>
-        Name of new computer scientist: <input type="text" name="name" />
-        <input type="submit" value="Add" />
-      </p>
-    </form>
   </body>
 </html>
