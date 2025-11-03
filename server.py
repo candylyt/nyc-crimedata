@@ -132,6 +132,7 @@ def teardown_request(exception):
 # see for decorators: http://simeonfranklin.com/blog/2012/jul/1/python-decorators-in-12-steps/
 #
 @app.route('/')
+@app.route('/incidents')
 def index():
 	"""
 	request is a special object that Flask provides to access web request information:
@@ -319,6 +320,7 @@ def incidents_analysis():
 	# user inputs
 	window = request.args.get("window", "all")  # 90d, 180d, 1y, 3y, all
 	borough = request.args.get("borough")
+	postal_code = request.args.get("postal_code")
 	PRESETS_DAYS = {"90d": 90, "1y": 365, "5y": 365*5, "10y": 365*10}
 
 	filters = []
@@ -333,11 +335,16 @@ def incidents_analysis():
 		filters.append("a.borough = :borough")
 		parameters["borough"] = borough
 
+	if postal_code:
+		filters.append("a.postal_code = :postal_code")
+		parameters["postal_code"] = postal_code
+
 	if filters:
 		where_clause = "WHERE " + " AND ".join(filters)
 	else:
 		where_clause = ""
 
+	# query 1: top 10 crime types
 	top10_sql = f"""
 	WITH counts AS (
 	SELECT
@@ -363,13 +370,13 @@ def incidents_analysis():
 	ORDER BY incident_count DESC, crime_type;
 	"""
 
+	# execute query & store results
 	cursor = g.conn.execute(text(top10_sql), parameters)
 	rows = cursor.fetchall()
 	columns = cursor.keys()
 	cursor.close()
 
-
-	return render_template("incidents-analysis.html", rows=rows, columns=columns, window=window, borough=borough)
+	return render_template("incidents-analysis.html", rows=rows, columns=columns, window=window, borough=borough, postal_code=postal_code)
 
 @app.route('/another')
 def another():

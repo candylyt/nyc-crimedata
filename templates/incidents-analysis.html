@@ -40,8 +40,11 @@
         display: block;
         margin-bottom: 4px;
       }
-      input[type="date"],
       select {
+        padding: 6px 8px;
+        width: 100%;
+      }
+      input {
         padding: 6px 8px;
         width: 100%;
       }
@@ -85,6 +88,8 @@
   <body>
     <h1>Incident Analysis</h1>
 
+    <p><a href="/">Home Page</a></p>
+
     <!-- Fixed Top 10 crime types per borough -->
     <div class="section" id="fixed10">
       <h2>Top 10 Crime Types in New York City</h2>
@@ -110,6 +115,12 @@
           {% endfor %}
         </select>
       </div>
+
+      <div>
+        <label>Postal Code</label>
+        <input type="text" name="postal_code" value="{{ postal_code or '' }}" placeholder="e.g. 10025" />
+      </div>
+
 
       <div class="actions">
         <button class="btn" type="submit">Run</button>
