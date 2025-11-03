@@ -62,6 +62,7 @@ with engine.connect() as conn:
 	conn.commit()
 '''
 
+# helper functions
 def build_base_args():
 	base_args = request.args.to_dict(flat=False)
 	base_args.pop("page", None)
@@ -81,6 +82,12 @@ def make_url_page(page):
 			else:
 				args_flat[k] = ""
 	return url_for("index", **args_flat)
+
+def handle_wildcards_characters(s):
+	s = s.replace("\\", "\\\\")
+	s = s.replace("%", "\\%")
+	s = s.replace("_", "\\_")
+	return s
 
 @app.before_request
 def before_request():
@@ -140,9 +147,12 @@ def index():
 	incidents_per_page = 20
 	lawcategory = request.args.get("lawcategory")
 	status = request.args.get("status")
-	borough = request.args.get("borough")
+	borough = request.args.getlist("borough")
 	severity = request.args.get("severity")
 	crime_type = request.args.get("crime_type")
+	postal_code = request.args.get("postal_code")
+	date_start = request.args.get("date_start")
+	date_end = request.args.get("date_end")
 
 	filters = []
 	parameters = {}
@@ -156,17 +166,29 @@ def index():
 		parameters["status"] = status
 	
 	if borough:
-		filters.append("a.borough = :borough")
+		filters.append("a.borough = ANY(:borough)")
 		parameters["borough"] = borough
 	
 	if severity: 
 		filters.append("ct.severity = :severity")
 		parameters["severity"] = severity
-	
-	if crime_type:
-		filters.append("ct.crime_type = :crime_type")
-		parameters["crime_type"] = crime_type
 
+	clean_crime_type = (crime_type or "").strip().lower()
+	if clean_crime_type:
+		filters.append("ct.crime_type ILIKE :crime_type ESCAPE '\\'")
+		parameters["crime_type"] = f"%{handle_wildcards_characters(clean_crime_type)}%"
+	
+	if postal_code:
+		filters.append("a.postal_code = :postal_code")
+		parameters["postal_code"] = postal_code
+	
+	if date_start:
+		filters.append("i.occurred_date >= :date_start")
+		parameters["date_start"] = date_start
+
+	if date_end:
+		filters.append("i.occurred_date <= :date_end")
+		parameters["date_end"] = date_end
 
 	# DEBUG: this is debugging code to see what request looks like
 	print(request.args)
