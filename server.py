@@ -14,6 +14,7 @@ from pydoc import text
 from sqlalchemy import *
 from sqlalchemy.pool import NullPool
 from flask import Flask, request, render_template, g, redirect, Response, abort, url_for
+from datetime import date, datetime, timedelta
 from math import ceil
 
 tmpl_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'templates')
@@ -309,6 +310,67 @@ def index():
 # Notice that the function name is another() rather than index()
 # The functions for each app.route need to have different names
 #
+
+@app.route('/incidents/analysis')
+def incidents_analysis():
+
+	# section 1: top 10 crime types in nyc
+
+	# user inputs
+	window = request.args.get("window", "all")  # 90d, 180d, 1y, 3y, all
+	borough = request.args.get("borough")
+	PRESETS_DAYS = {"90d": 90, "1y": 365, "5y": 365*5, "10y": 365*10}
+
+	filters = []
+	parameters = {}
+
+	if window != "all":
+		cutoff_date = date.today() - timedelta(days=PRESETS_DAYS.get(window, 90))
+		filters.append("i.occurred_date >= :cutoff_date")
+		parameters["cutoff_date"] = cutoff_date
+
+	if borough:
+		filters.append("a.borough = :borough")
+		parameters["borough"] = borough
+
+	if filters:
+		where_clause = "WHERE " + " AND ".join(filters)
+	else:
+		where_clause = ""
+
+	top10_sql = f"""
+	WITH counts AS (
+	SELECT
+		ct.crime_type_id,
+		ct.crime_type,
+		COUNT(*) AS incident_count
+	FROM classified_as ca
+	JOIN crimetype ct ON ct.crime_type_id = ca.crime_type_id
+	JOIN incident i  ON i.incident_id = ca.incident_id
+	JOIN address a  ON a.address_id = i.address_id
+	{where_clause}
+	GROUP BY ct.crime_type_id, ct.crime_type
+	),
+	ranked AS (
+	SELECT
+		c.*,
+		DENSE_RANK() OVER (ORDER BY c.incident_count DESC) AS rnk
+	FROM counts c
+	)
+	SELECT crime_type, incident_count
+	FROM ranked
+	WHERE rnk <= 10
+	ORDER BY incident_count DESC, crime_type;
+	"""
+
+	cursor = g.conn.execute(text(top10_sql), parameters)
+	rows = cursor.fetchall()
+	columns = cursor.keys()
+	cursor.close()
+
+
+	return render_template("incidents-analysis.html", rows=rows, columns=columns, window=window, borough=borough)
+
 @app.route('/another')
 def another():
 	return render_template("another.html")

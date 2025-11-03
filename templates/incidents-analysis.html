@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Incident Analysis</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 24px;
+      }
+      h1 {
+        margin-bottom: 16px;
+      }
+      .section {
+        border: 1px solid #ddd;
+        border-radius: 8px;
+        padding: 16px;
+        margin-bottom: 20px;
+        background: #fafafa;
+      }
+      .section h2 {
+        margin: 0 0 12px 0;
+      }
+      .controls {
+        display: grid;
+        gap: 10px;
+        align-items: end;
+        grid-template-columns: repeat(6, minmax(140px, 1fr));
+        margin-bottom: 12px;
+      }
+      .controls .actions {
+        grid-column: 1 / -1;
+        display: flex;
+        gap: 10px;
+        justify-content: flex-start;
+      }
+      label {
+        font-size: 0.95rem;
+        color: #444;
+        display: block;
+        margin-bottom: 4px;
+      }
+      input[type="date"],
+      select {
+        padding: 6px 8px;
+        width: 100%;
+      }
+      table {
+        border-collapse: collapse;
+        width: 100%;
+        margin-top: 10px;
+      }
+      th,
+      td {
+        border: 1px solid #ddd;
+        padding: 8px;
+        text-align: left;
+      }
+      th {
+        background: #f2f2f2;
+      }
+      .note {
+        color: #666;
+      }
+      .btn {
+        padding: 6px 12px;
+        border: 1px solid #2a9d8f;
+        background: #2a9d8f;
+        color: #fff;
+        border-radius: 4px;
+        text-decoration: none;
+        cursor: pointer;
+      }
+      .btn.secondary {
+        border-color: #999;
+        background: #eee;
+        color: #333;
+      }
+      details summary {
+        cursor: pointer;
+        color: #3366cc;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Incident Analysis</h1>
+
+    <!-- Fixed Top 10 crime types per borough -->
+    <div class="section" id="fixed10">
+      <h2>Top 10 Crime Types in New York City</h2>
+      <form class="controls" method="get" action="{{ url_for('incidents_analysis') }}">
+      <div>
+        <label>Time Window</label>
+        <select name="window" id="window-select">
+          <option value="90d"  {% if window == '90d' %}selected{% endif %}>Last 90 days</option>
+          <option value="1y" {% if window == '1y' %}selected{% endif %}>Last 1 year</option>
+          <option value="5y"   {% if window == '5y' %}selected{% endif %}>Last 5 years</option>
+          <option value="10y"   {% if window == '10y' %}selected{% endif %}>Last 10 years</option>
+          <option value="all" {% if window == 'all' %}selected{% endif %}>All time</option>
+        </select>
+      </div>
+
+      <div>
+        <label>Borough</label>
+        {% set selected_borough = request.args.get('borough', '') %}
+        <select name="borough">
+          <option value="">(All Boroughs)</option>
+          {% for b in ["MANHATTAN", "BROOKLYN", "QUEENS", "BRONX", "STATEN ISLAND"] %}
+            <option value="{{ b }}" {% if selected_borough == b %}selected{% endif %}>{{ b }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="actions">
+        <button class="btn" type="submit">Run</button>
+        <a class="btn secondary" href="{{ url_for('incidents_analysis') }}">Reset</a>
+      </div>
+    </form>
+
+    {% if borough %}
+    <h3>{{ borough }}</h3>
+    {% endif %}
+    {% if rows %}
+    <table>
+      <thead>
+        <tr>
+          {% for col in columns %}
+            <th>{{ col }}</th>
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+          <tr>
+            {% for cell in row %}
+              <td>{{ cell }}</td>
+            {% endfor %}
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="note">No results for the selected filters.</p>
+    {% endif %}
+
+    </div>
+
+  </body>
+</html>
