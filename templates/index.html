@@ -138,6 +138,8 @@
       </div>
     </div>
 
+    <p><a href="incidents/analysis">Incident Analysis</a></p>
+
     <!-- FILTER FORM (method=GET) -->
     <form class="filters" method="get" action="{{ url_for('index') }}">
 
@@ -256,14 +258,5 @@
       <span>Last »</span>
       {% endif %}
     </div>
-
-    <p><a href="another">Go to the other page</a></p>
-
-    <form method="POST" action="/add">
-      <p>
-        Name of new computer scientist: <input type="text" name="name" />
-        <input type="submit" value="Add" />
-      </p>
-    </form>
   </body>
 </html>
