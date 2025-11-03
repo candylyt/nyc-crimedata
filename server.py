@@ -9,10 +9,12 @@ A debugger such as "pdb" may be helpful for debugging.
 Read about it online.
 """
 import os
+from pydoc import text
 # accessible as a variable in index.html:
 from sqlalchemy import *
 from sqlalchemy.pool import NullPool
 from flask import Flask, request, render_template, g, redirect, Response, abort
+from math import ceil
 
 tmpl_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'templates')
 app = Flask(__name__, template_folder=tmpl_dir)
@@ -113,14 +115,28 @@ def index():
 	See its API: https://flask.palletsprojects.com/en/1.1.x/api/#incoming-request-data
 	"""
 
+	# query parameters
+	page = max(int(request.args.get("page", 1)), 1)
+	incidents_per_page = 20
+
 	# DEBUG: this is debugging code to see what request looks like
 	print(request.args)
 
+	# count the total number of incidents
+	count_query = """
+	SELECT COUNT(*) As total
+	FROM incident;
+	"""
 
+	total_incidents = g.conn.execute(text(count_query)).scalar_one()
+	print(total_incidents)
+
+	total_pages = max(ceil(total_incidents/incidents_per_page), 1)
+	offset = (page - 1) * incidents_per_page
 	#
 	# example of a database query
 	#
-	select_query = """
+	data_query = """
 	SELECT i.occurred_date, ct.crime_type, lc.category, ct.severity, i.status, j.description AS jurisdiction, a.borough, a.postal_code
 	FROM incident i 
 		JOIN address a ON i.address_id = a.address_id 
@@ -128,9 +144,9 @@ def index():
 		JOIN classified_as ca ON i.incident_id = ca.incident_id
 		JOIN crimetype ct ON ca.crime_type_id = ct.crime_type_id
 		JOIN lawcategory lc ON lc.law_cat_id = ct.law_cat_id
-	LIMIT 10;
+	LIMIT :limit OFFSET :offset;
 	"""
-	cursor = g.conn.execute(text(select_query))
+	cursor = g.conn.execute(text(data_query), {"limit": incidents_per_page, "offset": offset})
 
 	rows = cursor.fetchall()
 	columns = cursor.keys()
@@ -138,6 +154,14 @@ def index():
 	# for result in cursor:
 	# 	incidents.append(result[0])
 	cursor.close()
+
+	base_args = {}
+	base_args["incidents_per_page"] = incidents_per_page
+
+	window = 3
+	start = max(page - window, 1)
+	end = min(page + window, total_pages)
+	page_numbers = list(range(start, end + 1))
 
 	#
 	# Flask uses Jinja templates, which is an extension to HTML where you can
@@ -173,7 +197,17 @@ def index():
 	# for example, the below file reads template/index.html
 	#
 	# return render_template("index.html", **context)
-	return render_template("index.html", rows=rows, columns=columns)
+	return render_template(
+		"index.html", 
+		rows=rows, 
+		columns=columns, 
+		page=page,
+		per_page=incidents_per_page,
+		total=total_incidents,
+		total_pages=total_pages,
+		page_numbers=page_numbers,
+		base_args=base_args 
+	)
 
 #
 # This is an example of a different path.  You can see it at:

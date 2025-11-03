@@ -4,6 +4,61 @@
       font-size: 15pt;
       font-family: arial;
     }
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin-top: 16px;
+    }
+    th,
+    td {
+      border: 1px solid #ddd;
+      padding: 8px;
+      text-align: left;
+    }
+    th {
+      background: #f2f2f2;
+    }
+    .pagination {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 8px;
+      margin-top: 16px;
+      flex-wrap: wrap;
+    }
+    .pagination a,
+    .pagination span {
+      padding: 6px 10px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      text-decoration: none;
+      color: #333;
+    }
+    .pagination .active {
+      background: blue;
+      color: #fff;
+      border-color: #333;
+    }
+    .pagination span {
+      opacity: 0.5;
+    }
+    .summary {
+      margin-top: 8px;
+      color: #666;
+    }
+    form.filters {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+    input[type="text"],
+    input[type="number"] {
+      padding: 6px 8px;
+    }
+    button {
+      padding: 6px 10px;
+    }
   </style>
 
   <body>
@@ -27,6 +82,49 @@
         {% endfor %}
       </tbody>
     </table>
+
+    <div class="pagination">
+      <!-- First / Prev -->
+      {% set args = base_args.copy() %} {% if page > 1 %} {% set args =
+      args.update({'page': 1}) %}
+      <a
+        href="{{ url_for('index', page=1, per_page=base_args.get('per_page')) }}"
+        >« First</a
+      >
+      <a
+        href="{{ url_for('index', page=page-1, per_page=base_args.get('per_page')) }}"
+        >‹ Prev</a
+      >
+      {% else %}
+      <span>« First</span>
+      <span>‹ Prev</span>
+      {% endif %}
+
+      <!-- Numbered page links -->
+      {% for p in page_numbers %} {% if p == page %}
+      <span class="active">{{ p }}</span>
+      {% else %}
+      <a
+        href="{{ url_for('index', page=p, per_page=base_args.get('per_page')) }}"
+        >{{ p }}</a
+      >
+      {% endif %} {% endfor %}
+
+      <!-- Next / Last -->
+      {% if page < total_pages %}
+      <a
+        href="{{ url_for('index', page=page+1, per_page=base_args.get('per_page')) }}"
+        >Next ›</a
+      >
+      <a
+        href="{{ url_for('index', page=total_pages, per_page=base_args.get('per_page')) }}"
+        >Last »</a
+      >
+      {% else %}
+      <span>Next ›</span>
+      <span>Last »</span>
+      {% endif %}
+    </div>
 
     <p><a href="another">Go to the other page</a></p>
 
