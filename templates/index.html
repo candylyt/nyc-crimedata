@@ -42,19 +42,35 @@
     .pagination span {
       opacity: 0.5;
     }
-    .summary {
-      margin-top: 8px;
-      color: #666;
-    }
     form.filters {
+      border: 1px dashed peru;
+      padding: 10px;
+      border-radius: 6px;
       display: grid;
-      grid-template-columns: repeat(6, 1fr);
+      grid-template-columns: repeat(4, 1fr);
+      grid-auto-rows: auto;
       gap: 10px;
-      align-items: end;
+      align-items: center;
+      margin-bottom: 20px;
     }
     .filters .actions {
       display: flex;
       gap: 10px;
+      align-items: center;
+      justify-content: center;
+      grid-column: 1/-1;
+      margin-top: 15px;
+    }
+    .filters .actions button{
+      background-color: green;
+      color: white;
+      border: none;
+    }
+    .filters .actions button:hover{
+      cursor: pointer;
+    }
+    .filters .actions a{
+      color: red;
     }
     select,
     input[type="text"] {
@@ -95,12 +111,13 @@
 
     <!-- FILTER FORM (method=GET) -->
     <form class="filters" method="get" action="{{ url_for('index') }}">
-      <!-- dropdowns -->
+      
+      <!-- First Row -->
       <div>
         <label>Law Category</label>
         <select name="lawcategory">
           <option value="">(Any)</option>
-          {% for val in ["FELONY", "MISDEMEANOR", "VIOLATION"] %}
+          {% for val in ["Felony", "Misdemeanor", "Violation"] %}
             <option value="{{ val }}" {% if request.args.get('lawcategory') == val %}selected{% endif %}>{{ val }}</option>
           {% endfor %}
         </select>
@@ -131,7 +148,6 @@
         <input type="text" name="crime_type" value="{{ request.args.get('crime_type','') }}" placeholder="e.g. ASSAULT" />
       </div>
 
-      <!-- Checkboxes (multi-select): same 'borough' name repeated -->
       <fieldset>
         <legend>Borough</legend>
         <div class="checkboxes">
@@ -144,6 +160,22 @@
           {% endfor %}
         </div>
       </fieldset>
+
+      <!-- Second Row -->
+      <div>
+        <label>Postal Code</label>
+        <input type="text" name="postal_code" value="{{ request.args.get('postal_code','') }}" placeholder="e.g. 10027" />
+      </div>
+
+      <div>
+        <label>Occurred Date (Begin)</label>
+        <input type="date" name="date_start" value="{{ request.args.get('date_start','') }}" />
+      </div>
+
+      <div>
+        <label>Occurred Date (End)</label>
+        <input type="date" name="date_end" value="{{ request.args.get('date_end','') }}" />
+      </div>
 
       <div class="actions">
         <button type="submit">Apply Filters</button>
