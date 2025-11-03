@@ -13,7 +13,7 @@ from pydoc import text
 # accessible as a variable in index.html:
 from sqlalchemy import *
 from sqlalchemy.pool import NullPool
-from flask import Flask, request, render_template, g, redirect, Response, abort
+from flask import Flask, request, render_template, g, redirect, Response, abort, url_for
 from math import ceil
 
 tmpl_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'templates')
@@ -61,6 +61,26 @@ with engine.connect() as conn:
 	# you need to commit for create, insert, update queries to reflect
 	conn.commit()
 '''
+
+def build_base_args():
+	base_args = request.args.to_dict(flat=False)
+	base_args.pop("page", None)
+	return base_args
+
+def make_url_page(page):
+	base_args = build_base_args()
+	base_args["page"] = [str(page)]
+	
+	args_flat = {}
+	for k, v in base_args.items():
+		if len(v) > 1:
+			args_flat[k] = v
+		else:
+			if v:
+				args_flat[k] = v[0]
+			else:
+				args_flat[k] = ""
+	return url_for("index", **args_flat)
 
 @app.before_request
 def before_request():
@@ -118,25 +138,62 @@ def index():
 	# query parameters
 	page = max(int(request.args.get("page", 1)), 1)
 	incidents_per_page = 20
+	lawcategory = request.args.get("lawcategory")
+	status = request.args.get("status")
+	borough = request.args.get("borough")
+	severity = request.args.get("severity")
+	crime_type = request.args.get("crime_type")
+
+	filters = []
+	parameters = {}
+
+	if lawcategory:
+		filters.append("lc.category = :lawcategory")
+		parameters["lawcategory"] = lawcategory
+	
+	if status:
+		filters.append("i.status = :status")
+		parameters["status"] = status
+	
+	if borough:
+		filters.append("a.borough = :borough")
+		parameters["borough"] = borough
+	
+	if severity: 
+		filters.append("ct.severity = :severity")
+		parameters["severity"] = severity
+	
+	if crime_type:
+		filters.append("ct.crime_type = :crime_type")
+		parameters["crime_type"] = crime_type
+
 
 	# DEBUG: this is debugging code to see what request looks like
 	print(request.args)
 
+	where_clause = ""
+	if filters:
+		where_clause = "WHERE " + " AND ".join(filters)
+
 	# count the total number of incidents
-	count_query = """
+	count_query = f"""
 	SELECT COUNT(*) As total
-	FROM incident;
+	FROM incident i 
+		JOIN address a ON i.address_id = a.address_id 
+		JOIN jurisdiction j ON i.jur_id = j.jur_id
+		JOIN classified_as ca ON i.incident_id = ca.incident_id
+		JOIN crimetype ct ON ca.crime_type_id = ct.crime_type_id
+		JOIN lawcategory lc ON lc.law_cat_id = ct.law_cat_id
+	{where_clause}
 	"""
 
-	total_incidents = g.conn.execute(text(count_query)).scalar_one()
-	print(total_incidents)
-
+	total_incidents = g.conn.execute(text(count_query), parameters).scalar_one()
 	total_pages = max(ceil(total_incidents/incidents_per_page), 1)
 	offset = (page - 1) * incidents_per_page
 	#
 	# example of a database query
 	#
-	data_query = """
+	data_query = f"""
 	SELECT i.occurred_date, ct.crime_type, lc.category, ct.severity, i.status, j.description AS jurisdiction, a.borough, a.postal_code
 	FROM incident i 
 		JOIN address a ON i.address_id = a.address_id 
@@ -144,9 +201,11 @@ def index():
 		JOIN classified_as ca ON i.incident_id = ca.incident_id
 		JOIN crimetype ct ON ca.crime_type_id = ct.crime_type_id
 		JOIN lawcategory lc ON lc.law_cat_id = ct.law_cat_id
+	{where_clause}
+	ORDER BY i.occurred_date DESC
 	LIMIT :limit OFFSET :offset;
 	"""
-	cursor = g.conn.execute(text(data_query), {"limit": incidents_per_page, "offset": offset})
+	cursor = g.conn.execute(text(data_query), {**parameters, "limit": incidents_per_page, "offset": offset})
 
 	rows = cursor.fetchall()
 	columns = cursor.keys()
@@ -157,6 +216,17 @@ def index():
 
 	base_args = {}
 	base_args["incidents_per_page"] = incidents_per_page
+
+	if lawcategory:
+		base_args["lawcategory"] = lawcategory
+	if status:
+		base_args["status"] = status
+	if borough:
+		base_args["borough"] = borough
+	if severity:
+		base_args["severity"] = severity
+	if crime_type:
+		base_args["crime_type"] = crime_type
 
 	window = 3
 	start = max(page - window, 1)
@@ -206,7 +276,7 @@ def index():
 		total=total_incidents,
 		total_pages=total_pages,
 		page_numbers=page_numbers,
-		base_args=base_args 
+		make_url=make_url_page,
 	)
 
 #

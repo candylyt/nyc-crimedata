@@ -47,10 +47,39 @@
       color: #666;
     }
     form.filters {
+      display: grid;
+      grid-template-columns: repeat(6, 1fr);
+      gap: 10px;
+      align-items: end;
+    }
+    .filters .actions {
       display: flex;
-      gap: 8px;
+      gap: 10px;
+    }
+    select,
+    input[type="text"] {
+      padding: 6px 8px;
+      width: 100%;
+    }
+    fieldset {
+      border: 1px solid #ddd;
+      padding: 8px;
+      border-radius: 6px;
+    }
+    legend {
+      font-size: 0.95rem;
+      padding: 0 4px;
+      color: #555;
+    }
+    .checkboxes {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    label.inline {
+      display: inline-flex;
+      gap: 6px;
       align-items: center;
-      margin-bottom: 12px;
     }
     input[type="text"],
     input[type="number"] {
@@ -63,6 +92,64 @@
 
   <body>
     <h1>NYC Crime Data</h1>
+
+    <!-- FILTER FORM (method=GET) -->
+    <form class="filters" method="get" action="{{ url_for('index') }}">
+      <!-- dropdowns -->
+      <div>
+        <label>Law Category</label>
+        <select name="lawcategory">
+          <option value="">(Any)</option>
+          {% for val in ["FELONY", "MISDEMEANOR", "VIOLATION"] %}
+            <option value="{{ val }}" {% if request.args.get('lawcategory') == val %}selected{% endif %}>{{ val }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div>
+        <label>Status</label>
+        <select name="status">
+          <option value="">(Any)</option>
+          {% for val in ["Open","Closed"] %}
+            <option value="{{ val }}" {% if request.args.get('status') == val %}selected{% endif %}>{{ val }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div>
+        <label>Severity</label>
+        <select name="severity">
+          <option value="">(Any)</option>
+          {% for val in ["low","medium","high"] %}
+            <option value="{{ val }}" {% if request.args.get('severity') == val %}selected{% endif %}>{{ val }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div>
+        <label>Crime Type</label>
+        <input type="text" name="crime_type" value="{{ request.args.get('crime_type','') }}" placeholder="e.g. ASSAULT" />
+      </div>
+
+      <!-- Checkboxes (multi-select): same 'borough' name repeated -->
+      <fieldset>
+        <legend>Borough</legend>
+        <div class="checkboxes">
+          {% set selected_boros = request.args.getlist('borough') %}
+          {% for b in ["MANHATTAN","BROOKLYN","QUEENS","BRONX","STATEN ISLAND"] %}
+            <label class="inline">
+              <input type="checkbox" name="borough" value="{{ b }}" {% if b in selected_boros %}checked{% endif %}/>
+              <span>{{ b }}</span>
+            </label>
+          {% endfor %}
+        </div>
+      </fieldset>
+
+      <div class="actions">
+        <button type="submit">Apply Filters</button>
+        <a href="{{ url_for('index') }}">Clear</a>
+      </div>
+    </form>
 
     <table>
       <thead>
@@ -85,14 +172,13 @@
 
     <div class="pagination">
       <!-- First / Prev -->
-      {% set args = base_args.copy() %} {% if page > 1 %} {% set args =
-      args.update({'page': 1}) %}
+      {% if page > 1 %}
       <a
-        href="{{ url_for('index', page=1, per_page=base_args.get('per_page')) }}"
+        href="{{ make_url(1) }}"
         >« First</a
       >
       <a
-        href="{{ url_for('index', page=page-1, per_page=base_args.get('per_page')) }}"
+        href="{{ make_url(page-1) }}"
         >‹ Prev</a
       >
       {% else %}
@@ -105,7 +191,7 @@
       <span class="active">{{ p }}</span>
       {% else %}
       <a
-        href="{{ url_for('index', page=p, per_page=base_args.get('per_page')) }}"
+        href="{{ make_url(p) }}"
         >{{ p }}</a
       >
       {% endif %} {% endfor %}
@@ -113,11 +199,11 @@
       <!-- Next / Last -->
       {% if page < total_pages %}
       <a
-        href="{{ url_for('index', page=page+1, per_page=base_args.get('per_page')) }}"
+        href="{{ make_url(page+1) }}"
         >Next ›</a
       >
       <a
-        href="{{ url_for('index', page=total_pages, per_page=base_args.get('per_page')) }}"
+        href="{{ make_url(total_pages) }}"
         >Last »</a
       >
       {% else %}
