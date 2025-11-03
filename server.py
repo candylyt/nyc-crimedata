@@ -857,8 +857,65 @@ def incidents_analysis():
 	rows = cursor.fetchall()
 	columns = cursor.keys()
 	cursor.close()
+    
+	# query 2: customized filter
+    
+	# user inputs
+	custom_postal_code = request.args.get("custom_postal_code")
+	custom_gender = request.args.get("custom_gender")
+	custom_age_group = request.args.get("custom_age_group")
+	custom_ethnicity = request.args.get("custom_ethnicity")
 
-	return render_template("incidents-analysis.html", rows=rows, columns=columns, window=window, borough=borough, postal_code=postal_code)
+	custom_filters = []
+	custom_parameters = {}
+
+	if custom_postal_code:
+		custom_filters.append("a.postal_code = :custom_postal_code")
+		custom_parameters["custom_postal_code"] = custom_postal_code
+
+	if custom_gender:
+		custom_filters.append("v.gender = :custom_gender")
+		custom_parameters["custom_gender"] = custom_gender
+
+	if custom_age_group:
+		custom_filters.append("v.age_grp = :custom_age_group")
+		custom_parameters["custom_age_group"] = custom_age_group
+
+	if custom_ethnicity:
+		custom_filters.append("v.race = :custom_ethnicity")
+		custom_parameters["custom_ethnicity"] = custom_ethnicity
+
+	if custom_filters:
+		custom_where_clause = "WHERE " + " AND ".join(custom_filters)
+	else:
+		custom_where_clause = ""
+            
+    # query 2: customized filters
+	custom_sql = f"""
+    SELECT 
+        ct.crime_type,
+        COUNT(*) AS num_incidents
+    FROM incident i
+        JOIN victim v ON v.incident_id = i.incident_id
+        JOIN address a ON i.address_id = a.address_id
+        JOIN classified_as ca ON ca.incident_id = i.incident_id
+        JOIN crimetype ct ON ct.crime_type_id = ca.crime_type_id
+    {custom_where_clause}
+    GROUP BY ct.crime_type_id
+    ORDER BY num_incidents DESC;
+    """
+
+    # execute query & store results
+	custom_cursor = g.conn.execute(text(custom_sql), custom_parameters)
+	custom_rows = custom_cursor.fetchall()
+	custom_columns = custom_cursor.keys()
+	custom_cursor.close()
+
+	return render_template(
+        "incidents-analysis.html", 
+        rows=rows, columns=columns, window=window, borough=borough, postal_code=postal_code,
+        custom_rows=custom_rows, custom_columns=custom_columns, custom_postal_code=custom_postal_code, custom_gender=custom_gender, custom_age_group=custom_age_group, custom_ethnicity=custom_ethnicity
+    )
 
 @app.route('/another')
 def another():

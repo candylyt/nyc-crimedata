@@ -89,71 +89,144 @@
 
     <p><a href="/">Home Page</a></p>
 
-    <!-- Fixed Top 10 crime types per borough -->
+    <!-- Top 10 crime types per borough -->
     <div class="section" id="fixed10">
       <h2>Top 10 Crime Types in New York City</h2>
       <form class="controls" method="get" action="{{ url_for('incidents_analysis') }}">
-      <div>
-        <label>Time Window</label>
-        <select name="window" id="window-select">
-          <option value="90d"  {% if window == '90d' %}selected{% endif %}>Last 90 days</option>
-          <option value="1y" {% if window == '1y' %}selected{% endif %}>Last 1 year</option>
-          <option value="5y"   {% if window == '5y' %}selected{% endif %}>Last 5 years</option>
-          <option value="10y"   {% if window == '10y' %}selected{% endif %}>Last 10 years</option>
-          <option value="all" {% if window == 'all' %}selected{% endif %}>All time</option>
-        </select>
-      </div>
+        <div>
+          <label>Time Window</label>
+          <select name="window" id="window-select">
+            <option value="90d"  {% if window == '90d' %}selected{% endif %}>Last 90 days</option>
+            <option value="1y" {% if window == '1y' %}selected{% endif %}>Last 1 year</option>
+            <option value="5y"   {% if window == '5y' %}selected{% endif %}>Last 5 years</option>
+            <option value="10y"   {% if window == '10y' %}selected{% endif %}>Last 10 years</option>
+            <option value="all" {% if window == 'all' %}selected{% endif %}>All time</option>
+          </select>
+        </div>
 
-      <div>
-        <label>Borough</label>
-        {% set selected_borough = request.args.get('borough', '') %}
-        <select name="borough">
-          <option value="">(All Boroughs)</option>
-          {% for b in ["MANHATTAN", "BROOKLYN", "QUEENS", "BRONX", "STATEN ISLAND"] %}
-            <option value="{{ b }}" {% if selected_borough == b %}selected{% endif %}>{{ b }}</option>
-          {% endfor %}
-        </select>
-      </div>
+        <div>
+          <label>Borough</label>
+          {% set selected_borough = request.args.get('borough', '') %}
+          <select name="borough">
+            <option value="">(All Boroughs)</option>
+            {% for b in ["MANHATTAN", "BROOKLYN", "QUEENS", "BRONX", "STATEN ISLAND"] %}
+              <option value="{{ b }}" {% if selected_borough == b %}selected{% endif %}>{{ b }}</option>
+            {% endfor %}
+          </select>
+        </div>
 
-      <div>
-        <label>Postal Code</label>
-        <input type="text" name="postal_code" value="{{ postal_code or '' }}" placeholder="e.g. 10025" />
-      </div>
+        <div>
+          <label>Postal Code</label>
+          <input type="text" name="postal_code" value="{{ postal_code or '' }}" placeholder="e.g. 10025" />
+        </div>
 
 
-      <div class="actions">
-        <button class="btn" type="submit">Run</button>
-        <a class="btn secondary" href="{{ url_for('incidents_analysis') }}">Reset</a>
-      </div>
-    </form>
+        <div class="actions">
+          <button class="btn" type="submit">Run</button>
+          <a class="btn secondary" href="{{ url_for('incidents_analysis') }}">Reset</a>
+        </div>
+      </form>
 
-    {% if borough %}
-    <h3>{{ borough }}</h3>
-    {% endif %}
-    {% if rows %}
-    <table>
-      <thead>
-        <tr>
-          {% for col in columns %}
-            <th>{{ col }}</th>
-          {% endfor %}
-        </tr>
-      </thead>
-      <tbody>
-        {% for row in rows %}
+      {% if borough %}
+      <h3>{{ borough }}</h3>
+      {% endif %}
+      {% if rows %}
+      <table>
+        <thead>
           <tr>
-            {% for cell in row %}
-              <td>{{ cell }}</td>
+            {% for col in columns %}
+              <th>{{ col }}</th>
             {% endfor %}
           </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-    {% else %}
-    <p class="note">No results for the selected filters.</p>
-    {% endif %}
-
+        </thead>
+        <tbody>
+          {% for row in rows %}
+            <tr>
+              {% for cell in row %}
+                <td>{{ cell }}</td>
+              {% endfor %}
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p class="note">No results for the selected filters.</p>
+      {% endif %}
     </div>
+
+    <!-- Custom incident filters -->
+    <div class="section" id="custom-filters">
+      <h2>Custom Incident Filters</h2>
+      <form class="controls" method="get" action="{{ url_for('incidents_analysis') }}">
+
+        <div>
+          <label>Victim's Gender</label>
+          {% set selected_gender = request.args.get('custom_gender', '') %}
+          <select name="custom_gender">
+            <option value="">(All Genders)</option>
+            {% for g in ["Male", "Female"] %}
+              <option value="{{ g }}" {% if selected_gender == g %}selected{% endif %}>{{ g }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div>
+          <label>Victim's Age Group</label>
+          {% set selected_age_group = request.args.get('custom_age_group', '') %}
+          <select name="custom_age_group">
+            <option value="">(All Age Groups)</option>
+            {% for age in ["<18", "18-24", "25-44", "45-64", "65+"] %}
+            <option value="{{ age | e}}" {% if selected_age_group == age %}selected{% endif %}>{{ age }}</option>
+          {% endfor %}
+          </select>
+        </div>
+
+        <div>
+          <label>Victim's Ethnicity</label>
+          {% set selected_ethnicity = request.args.get('custom_ethnicity', '') %}
+          <select name="custom_ethnicity">
+            <option value="">(All Ethnicities)</option>
+            {% for ethnicity in ["BLACK", "WHITE", "WHITE HISPANIC", "BLACK HISPANIC", "ASIAN / PACIFIC ISLANDER", "AMERICAN INDIAN/ALASKAN NATIVE"] %}
+            <option value="{{ ethnicity }}" {% if selected_ethnicity == ethnicity %}selected{% endif %}>{{ ethnicity }}</option>
+          {% endfor %}
+          </select>
+        </div>
+
+        <div>
+          <label>Postal Code</label>
+          <input type="text" name="custom_postal_code" value="{{ custom_postal_code or '' }}" placeholder="e.g. 10025" />
+        </div>
+
+        <div class="actions">
+          <button class="btn" type="submit">Run</button>
+          <a class="btn secondary" href="{{ url_for('incidents_analysis') }}">Reset</a>
+        </div>
+      </form>
+
+      {% if custom_rows %}
+      <table>
+        <thead>
+          <tr>
+            {% for col in custom_columns %}
+              <th>{{ col }}</th>
+            {% endfor %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in custom_rows %}
+            <tr>
+              {% for cell in row %}
+                <td>{{ cell }}</td>
+              {% endfor %}
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p class="note">No results for the selected filters.</p>
+      {% endif %}
+    </div>
+
 
   </body>
 </html>
