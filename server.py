@@ -203,8 +203,8 @@ def admin_index():
     )
 @app.route('/admin/<int:incident_id>', methods=['GET', 'POST'])
 def admin_incident_detail(incident_id):
-    # 1) fetch incident
-    query = """
+    # Incident core
+    incident = g.conn.execute(text("""
         SELECT
             i.incident_id,
             i.occurred_date,
@@ -223,119 +223,85 @@ def admin_incident_detail(incident_id):
         JOIN crimetype ct     ON ca.crime_type_id = ct.crime_type_id
         JOIN lawcategory lc   ON lc.law_cat_id = ct.law_cat_id
         WHERE i.incident_id = :incident_id
-    """
-    incident = g.conn.execute(text(query), {"incident_id": incident_id}).mappings().first()
+    """), {"incident_id": incident_id}).mappings().first()
     if not incident:
         abort(404)
 
-    # parse existing [OccurredEnd=YYYY-MM-DD] tag (if any)
-    import re
-    incident_end = None
-    if incident.get("description"):
-        m = re.search(r"\[OccurredEnd=(\d{4}-\d{2}-\d{2})\]", incident["description"])
-        if m: incident_end = m.group(1)
+    # Related rows
+    suspects = g.conn.execute(text("""
+        SELECT suspect_id, gender, race, age_grp, arrest_status
+        FROM suspect
+        WHERE incident_id = :incident_id
+        ORDER BY suspect_id
+    """), {"incident_id": incident_id}).mappings().all()
 
-    # suspects / victims
-    suspects = g.conn.execute(
-        text("""SELECT suspect_id, gender, race, age_grp, arrest_status
-                FROM suspect WHERE incident_id = :incident_id ORDER BY suspect_id"""),
-        {"incident_id": incident_id},
-    ).mappings().all()
-
-    victims = g.conn.execute(
-        text("""SELECT victim_id, gender, race, injury_severity, age_grp
-                FROM victim WHERE incident_id = :incident_id ORDER BY victim_id"""),
-        {"incident_id": incident_id},
-    ).mappings().all()
+    victims = g.conn.execute(text("""
+        SELECT victim_id, gender, race, injury_severity, age_grp
+        FROM victim
+        WHERE incident_id = :incident_id
+        ORDER BY victim_id
+    """), {"incident_id": incident_id}).mappings().all()
 
     if request.method == "POST":
         action = request.form.get("action")
 
-        # keep your existing update_status & delete_incident handlers...
+        # Update status (Open/Closed)
+        if action == "update_status":
+            new_status = (request.form.get("new_status") or "").strip()
+            if new_status in ("Open", "Closed"):
+                g.conn.execute(text("""
+                    UPDATE incident SET status = :s WHERE incident_id = :id
+                """), {"s": new_status, "id": incident_id})
+                g.conn.commit()
+            return redirect(url_for("admin_incident_detail", incident_id=incident_id))
 
-        # --- NEW: update a suspect's arrest status ---
+        # Delete incident (false report) -> back to admin list with banner
+        if action == "delete_incident":
+            g.conn.execute(text("DELETE FROM incident WHERE incident_id = :id"), {"id": incident_id})
+            g.conn.commit()
+            flash(f"Incident #{incident_id} was deleted as a false report.", "success")
+            return redirect(url_for("admin_index"))
+
+        # Update suspect arrest status (Yes/No)
         if action == "update_suspect_arrest":
             sid = request.form.get("suspect_id")
             val = request.form.get("arrest_status")  # "Yes" / "No"
-            if not sid or val not in ("Yes","No"):
-                return redirect(url_for("admin_incident_detail", incident_id=incident_id))
-            g.conn.execute(
-                text("UPDATE suspect SET arrest_status = :ar WHERE incident_id = :iid AND suspect_id = :sid"),
-                {"ar": True if val == "Yes" else False, "iid": incident_id, "sid": int(sid)}
-            )
-            g.conn.commit()
-            return redirect(url_for("admin_incident_detail", incident_id=incident_id))
-
-        # --- NEW: update Occurred Date (End) (stored in incident_details tag) ---
-        if action == "update_end_date":
-            new_end = (request.form.get("occurred_date_end") or "").strip()
-            # very light validation YYYY-MM-DD
-            import re
-            if re.fullmatch(r"\d{4}-\d{2}-\d{2}", new_end):
-                # get current details text
-                details_row = g.conn.execute(
-                    text("SELECT incident_details FROM incident WHERE incident_id = :id"),
-                    {"id": incident_id}
-                ).first()
-                current = (details_row[0] or "") if details_row else ""
-                # replace existing tag or append new one
-                if "[OccurredEnd=" in current:
-                    updated = re.sub(r"\[OccurredEnd=\d{4}-\d{2}-\d{2}\]",
-                                     f"[OccurredEnd={new_end}]",
-                                     current)
-                else:
-                    updated = (current + " ").strip() + f" [OccurredEnd={new_end}]"
-                g.conn.execute(
-                    text("UPDATE incident SET incident_details = :d WHERE incident_id = :id"),
-                    {"d": updated.strip(), "id": incident_id}
-                )
+            if sid and val in ("Yes", "No"):
+                g.conn.execute(text("""
+                    UPDATE suspect
+                    SET arrest_status = :ar
+                    WHERE incident_id = :iid AND suspect_id = :sid
+                """), {"ar": (val == "Yes"), "iid": incident_id, "sid": int(sid)})
                 g.conn.commit()
-            # redirect either way
             return redirect(url_for("admin_incident_detail", incident_id=incident_id))
-        if action == "delete_incident":
-            # delete incident (cascades will remove suspects/victims/classified_as if you set them)
-            g.conn.execute(text("DELETE FROM incident WHERE incident_id = :id"), {"id": incident_id})
-            g.conn.commit()
-            flash(f"Incident #{incident_id} was successfully deleted as a false report.", "success")
-            return redirect(url_for("admin_index"))
 
+    # No end-date parsing or UI anymore
     return render_template(
         "admin_detail.html",
         incident=incident,
         suspects=suspects,
         victims=victims,
-        incident_end=incident_end,
     )
 
 
 @app.route('/admin/new', methods=['GET', 'POST'])
 def admin_new_incident():
-    # For dropdowns (we'll also compute an int display id)
+    # Dropdowns
     jurs_raw = g.conn.execute(text("""
         SELECT jur_id, description
         FROM jurisdiction
         ORDER BY description
     """)).mappings().all()
-
-    # Add display_id (integer) for clean rendering
     jurs = []
     for j in jurs_raw:
         try:
-            # if jur_id is 72.0 -> display 72
             display_id = int(float(j["jur_id"]))
         except Exception:
             display_id = j["jur_id"]
-        jurs.append({
-            "jur_id": j["jur_id"],        # original value (float-compatible)
-            "description": j["description"],
-            "display_id": display_id      # integer for UI text only
-        })
+        jurs.append({"jur_id": j["jur_id"], "description": j["description"], "display_id": display_id})
 
     crimes = g.conn.execute(text("""
-        SELECT ct.crime_type_id,
-               ct.crime_type,
-               ct.severity,
-               lc.category
+        SELECT ct.crime_type_id, ct.crime_type, ct.severity, lc.category
         FROM crimetype ct
         JOIN lawcategory lc ON lc.law_cat_id = ct.law_cat_id
         ORDER BY lc.category, ct.crime_type
@@ -344,15 +310,13 @@ def admin_new_incident():
     if request.method == 'GET':
         return render_template('admin_new.html', jurs=jurs, crimes=crimes)
 
-    # --- POST: read form ---
-    od_begin = (request.form.get('occurred_date_begin') or '').strip()
-    od_end   = (request.form.get('occurred_date_end') or '').strip()
-    status   = (request.form.get('status') or 'Open').strip() or 'Open'
-    details  = (request.form.get('incident_details') or '').strip()
+    # --- POST: read form (single occurred_date) ---
+    occurred_date = (request.form.get('occurred_date') or '').strip()
+    status        = (request.form.get('status') or 'Open').strip() or 'Open'
+    details       = (request.form.get('incident_details') or '').strip()
 
-    # your form uses a select named "jur_id" (value is the real DB value)
-    jur_id_raw    = (request.form.get('jur_id') or '').strip()
-    crime_type_id = (request.form.get('crime_type_id') or '').strip()
+    jur_id_raw     = (request.form.get('jur_id') or '').strip()
+    crime_type_id  = (request.form.get('crime_type_id') or '').strip()
 
     borough     = (request.form.get('borough') or '').strip()
     postal_code = (request.form.get('postal_code') or '').strip()
@@ -361,11 +325,8 @@ def admin_new_incident():
 
     errors = []
 
-    # required fields
-    if not od_begin:
-        errors.append("Occurred Date (Begin) is required.")
-    if not od_end:
-        errors.append("Occurred Date (End) is required.")
+    if not occurred_date:
+        errors.append("Occurred Date is required.")
     if status not in ('Open', 'Closed'):
         errors.append("Status must be Open or Closed.")
     if not jur_id_raw:
@@ -375,31 +336,25 @@ def admin_new_incident():
     if not borough or not postal_code or not latitude or not longitude:
         errors.append("Address requires borough, postal code, latitude, and longitude.")
 
-    # date parsing
+    # validate date format YYYY-MM-DD
     from datetime import date
     def _parse_date(s):
         try:
-            y,m,d = map(int, s.split('-'))
-            return date(y,m,d)
+            y, m, d = map(int, s.split('-'))
+            return date(y, m, d)
         except Exception:
             return None
+    d_when = _parse_date(occurred_date)
+    if not d_when:
+        errors.append("Occurred Date is invalid (use YYYY-MM-DD).")
 
-    d_begin = _parse_date(od_begin)
-    d_end   = _parse_date(od_end)
-    if not d_begin:
-        errors.append("Occurred Date (Begin) is invalid (use YYYY-MM-DD).")
-    if not d_end:
-        errors.append("Occurred Date (End) is invalid (use YYYY-MM-DD).")
-    if d_begin and d_end and d_end < d_begin:
-        errors.append("Occurred Date (End) must be the same or after Begin.")
-
-    # numeric checks
+    # numerics
     try:
         float(latitude); float(longitude)
     except Exception:
         errors.append("Latitude/Longitude must be numeric.")
 
-    # interpret selected jur_id as float and ensure it exists
+    # jurisdiction exists
     jur_id = None
     if jur_id_raw:
         try:
@@ -437,11 +392,7 @@ def admin_new_incident():
         {"b": borough, "p": postal_code, "lat": latitude, "lon": longitude},
     ).scalar_one()
 
-    # 2) Incident (store begin; stash end tag in details)
-    details_aug = details or ""
-    if d_end:
-        details_aug = (details_aug + " ").strip() + f"[OccurredEnd={d_end.isoformat()}]"
-
+    # 2) Incident (store the single occurred_date; no end-date tag)
     incident_id = g.conn.execute(
         text("""
             INSERT INTO incident (jur_id, address_id, occurred_date, status, incident_details)
@@ -451,9 +402,9 @@ def admin_new_incident():
         {
             "jur": jur_id,
             "addr": address_id,
-            "odate": d_begin.isoformat(),
+            "odate": d_when.isoformat(),
             "status": status,
-            "details": details_aug or None
+            "details": details or None
         },
     ).scalar_one()
 
@@ -470,7 +421,6 @@ def admin_new_incident():
         s_age    = (request.form.get(f'suspect{i}_age_grp') or '').strip()
         s_arrest = request.form.get(f'suspect{i}_arrest_status')
         arrest_status = True if s_arrest == 'on' else False
-
         if any([s_gender, s_race, s_age, s_arrest]):
             if s_gender and s_age:
                 g.conn.execute(
@@ -488,7 +438,6 @@ def admin_new_incident():
         v_race   = (request.form.get(f'victim{i}_race') or '').strip()
         v_age    = (request.form.get(f'victim{i}_age_grp') or '').strip()
         v_injury = (request.form.get(f'victim{i}_injury') or '').strip()
-
         if any([v_gender, v_race, v_age, v_injury]):
             if v_gender and v_age:
                 g.conn.execute(

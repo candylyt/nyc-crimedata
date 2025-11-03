@@ -4,6 +4,22 @@
       font-size: 15pt;
       font-family: arial;
     }
+        .btn-sky {
+        background: #e6f2ff;           /* light blue */
+        border: 1px solid #9cc9ff;      /* soft blue border */
+        color: #0b4a8b;                 /* dark blue text */
+        border-radius: 6px;
+        text-decoration: none;
+      }
+      .btn-sm {
+        font-size: 14px;
+        padding: 4px 10px;              /* smaller */
+        line-height: 1.2;
+      }
+      .btn-sky:hover {
+        background: #d8ecff;
+        border-color: #86bfff;
+      }
     .top-bar {
       display: flex;
       justify-content: space-between;
@@ -134,15 +150,9 @@
       </div>
     </div>
 
-    <div style="display:flex; justify-content:flex-end; gap:10px; margin: 8px 0 12px;">
-      <a href="{{ url_for('admin_new_incident') }}"
-         style="text-decoration:none; border:1px solid #000; border-radius:4px; padding:6px 12px;">
-        ➕ Create Incident
-      </a>
-      <a href="{{ url_for('admin_system') }}"
-         style="text-decoration:none; border:1px solid #000; border-radius:4px; padding:6px 12px;">
-        ⚙️ System
-      </a>
+    <div style="display:flex; justify-content:flex-end; gap:10px; margin:8px 0 12px;">
+      <a href="{{ url_for('admin_new_incident') }}" class="btn-sky btn-sm">➕ Create Incident</a>
+      <a href="{{ url_for('admin_system') }}" class="btn-sky btn-sm">⚙️ System</a>
     </div>
     {% with messages = get_flashed_messages(with_categories=true) %}
       {% if messages %}

@@ -15,6 +15,20 @@
     .actions { margin-top:10px; }
     .msg { background:#eef9f0; border:1px solid #bfe3c6; color:#1a7f37; padding:8px; border-radius:6px; margin-bottom:12px; }
     .err { background:#fff3f3; border:1px solid #f1c0c0; color:#b00020; padding:8px; border-radius:6px; margin-bottom:12px; }
+  .btn-sky {
+    background:#e6f2ff;           /* light blue */
+    border:1px solid #9cc9ff;
+    color:#0b4a8b;
+    border-radius:6px;
+    text-decoration:none;
+  }
+  .btn-sm {
+    font-size:14px;
+    padding:4px 10px;
+    line-height:1.2;
+  }
+  .btn-sky:hover { background:#d8ecff; border-color:#86bfff; }
+
   </style>
   <body>
     <div class="top-bar">
@@ -26,7 +40,8 @@
     </div>
 
     <div class="bar">
-      <a class="btn" href="{{ url_for('admin_index') }}">← Back to Admin List</a>
+    <a href="{{ url_for('admin_index') }}" class="btn-sky btn-sm">← Back to Admin List</a>
+
     </div>
 
     <h2>System Expansion</h2>

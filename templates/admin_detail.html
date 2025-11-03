@@ -22,7 +22,6 @@
       cursor: pointer;
     }
     .inline-form { display:inline; margin-left:10px; }
-    .small { font-size: 0.95rem; }
   </style>
   <body>
     <!-- header tabs -->
@@ -44,15 +43,7 @@
     </div>
 
     <div class="kv">
-      <p><strong>Occurred Date (Begin):</strong> {{ incident.occurred_date }}</p>
-      <p><strong>Occurred Date (End):</strong> {{ incident_end or '—' }}</p>
-      <form method="post" class="small" style="margin:6px 0;">
-        <input type="hidden" name="action" value="update_end_date">
-        <label>Set Occurred Date (End):</label>
-        <input type="date" name="occurred_date_end" value="{{ incident_end or '' }}">
-        <button type="submit">Update End Date</button>
-      </form>
-
+      <p><strong>Occurred Date:</strong> {{ incident.occurred_date }}</p>
       <p><strong>Status:</strong> {{ incident.status }}</p>
       <p><strong>Crime Type:</strong> {{ incident.crime_type }} ({{ incident.category }})</p>
       <p><strong>Severity:</strong> {{ incident.severity }}</p>
@@ -61,7 +52,7 @@
       <p><strong>Description:</strong> {{ incident.description or '(no details)' }}</p>
     </div>
 
-    <!-- Status update only (delete moved to header) -->
+    <!-- Status update -->
     <div class="section">
       <form method="post" style="display:inline-block; margin-right:12px;">
         <input type="hidden" name="action" value="update_status">

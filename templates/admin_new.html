@@ -15,6 +15,7 @@
     .actions button { padding:8px 12px; }
     .err { background:#fff3f3; border:1px solid #f1c0c0; color:#b00020; padding:8px; border-radius:6px; margin-bottom:12px; }
     .subgrid { display:grid; grid-template-columns: repeat(4, minmax(160px, 1fr)); gap:10px; }
+
   </style>
   <body>
     <div class="top-bar">
@@ -37,16 +38,13 @@
 
     <form method="post">
       <div class="grid">
+        <!-- Occurred Date (single) -->
         <div>
-          <label>Occurred Date (Begin)</label>
-          <input type="date" name="occurred_date_begin"
-                 value="{{ (form.occurred_date_begin if form else '') }}" required />
+          <label>Occurred Date</label>
+          <input type="date" name="occurred_date"
+                 value="{{ (form.occurred_date if form else '') }}" required />
         </div>
-        <div>
-          <label>Occurred Date (End)</label>
-          <input type="date" name="occurred_date_end"
-                 value="{{ (form.occurred_date_end if form else '') }}" required />
-        </div>
+
         <div>
           <label>Status</label>
           <select name="status">
