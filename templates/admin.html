@@ -234,6 +234,49 @@
         <input type="date" name="date_end" value="{{ request.args.get('date_end','') }}" />
       </div>
 
+      <!-- Third Row -->
+      <div>
+        <label>Victim's Gender</label>
+        <select name="victim_gender">
+          <option value="">(Any)</option>
+          {% for val in ["Male","Female"] %}
+            <option value="{{ val }}" {% if request.args.get('victim_gender') == val %}selected{% endif %}>{{ val }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div>
+        <label>Victim's Age Group</label>
+        <select name="victim_age_grp">
+          <option value="">(All Age Groups)</option>
+          {% for age in ["<18", "18-24", "25-44", "45-64", "65+"] %}
+            <option value="{{ age | e }}" {% if request.args.get('victim_age_grp') == age %}selected{% endif %}>{{ age }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+    <div>
+      <label>Victim's Ethnicity</label>
+      {% set selected_ethnicity = request.args.get('victim_ethnicity', '') %}
+      <select name="victim_ethnicity">
+        <option value="">(All Ethnicities)</option>
+        {% for ethnicity in [
+          "BLACK",
+          "WHITE",
+          "WHITE HISPANIC",
+          "BLACK HISPANIC",
+          "ASIAN / PACIFIC ISLANDER",
+          "AMERICAN INDIAN/ALASKAN NATIVE"
+        ] %}
+          <option value="{{ ethnicity }}"
+                  {% if selected_ethnicity == ethnicity %}selected{% endif %}>
+            {{ ethnicity }}
+          </option>
+        {% endfor %}
+      </select>
+    </div>
+
+
       <div class="actions">
         <button type="submit">Apply Filters</button>
         <a href="{{ url_for('admin_index') }}">Clear</a>
