@@ -1,0 +1,110 @@
+<html>
+  <style>
+    .btn-sky {
+      background: #e6f2ff;
+      border: 1px solid #9cc9ff;
+      color: #0b4a8b;
+      border-radius: 6px;
+      text-decoration: none;
+      padding: 6px 12px;
+    }
+    .btn-sm { font-size: 14px; line-height: 1.2; padding: 4px 10px; }
+    .btn-sky:hover { background:#d8ecff; border-color:#86bfff; }
+
+    body { font-family: arial; font-size: 15pt; }
+    .top-bar { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; }
+    .title { font-size:28px; font-weight:bold; }
+    .tabs a { margin-left:8px; text-decoration:none; padding:6px 10px; border:1px solid #000; border-radius:4px; color:#000; }
+    .tabs a.active { background:#000; color:#fff; }
+
+    .grid { display:grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    .card { border:1px solid #ddd; border-radius:8px; padding:14px; }
+    h2 { margin: 6px 0 12px; }
+
+    table { border-collapse: collapse; width: 100%; margin-top: 8px; }
+    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+    th { background: #f2f2f2; }
+
+    .risk { font-weight:bold; padding:3px 8px; border-radius:6px; display:inline-block; }
+    .risk.low { background:#eef9f0; color:#1a7f37; border:1px solid #bfe3c6; }
+    .risk.moderate { background:#fff8e6; color:#8d6a00; border:1px solid #f2d48a; }
+    .risk.high { background:#fff3f3; color:#b00020; border:1px solid #f1c0c0; }
+
+    .form-row { display:flex; gap:10px; align-items:center; margin-top:8px; }
+    input[type="text"] { padding:6px 8px; }
+    button { padding:6px 10px; }
+  </style>
+  <body>
+    <div class="top-bar">
+      <div class="title">NYC Crime Data</div>
+      <div class="tabs">
+        <a href="{{ url_for('index') }}">General User</a>
+        <a href="{{ url_for('admin_index') }}">Administrator</a>
+      </div>
+    </div>
+<div style="display:flex; justify-content:flex-end; margin:8px 0 12px;">
+  <a href="{{ url_for('index') }}" class="btn-sky btn-sm">← Back to Incidents</a>
+</div>
+
+    <div class="grid">
+      <!-- Left: Top 10 Safest Postal Codes -->
+      <div class="card">
+        <h2>Top 10 Safest Area in NYC</h2>
+        <p style="margin:0 0 6px;">Sorted by a weighted score: <em>incidents + severity points</em> (low=1, medium=3, high=5).</p>
+        <table>
+        <thead>
+          <tr>
+            <th>Postal Code</th>
+            <th>Borough</th>
+            <th>Incidents</th>
+            <th>Severity Points</th>
+            <th>Risk Score</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in top_rows %}
+            <tr>
+              <td>{{ r.postal_code }}</td>
+              <td>{{ r.borough }}</td>
+              <td>{{ r.incidents }}</td>
+              <td>{{ r.severity_points }}</td>
+              <td>{{ r.risk_score }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+
+        </table>
+      </div>
+
+      <!-- Right: Your Postal Code Risk -->
+      <div class="card">
+        <h2>Assess Risk in Your Neighborhood</h2>
+        <form method="get" action="{{ url_for('recommendations') }}">
+          <div class="form-row">
+            <label>Postal Code</label>
+            <input type="text" name="postal_code" value="{{ postal_code or '' }}" placeholder="e.g., 10027" />
+            <button type="submit">Check</button>
+          </div>
+        </form>
+
+        {% if postal_code and not user_result %}
+          <p style="margin-top:10px;">No incidents found for <strong>{{ postal_code }}</strong> in the dataset.</p>
+        {% endif %}
+
+        {% if user_result %}
+          <div style="margin-top:10px;">
+            <p><strong>Postal Code:</strong> {{ user_result.postal_code }} ({{ user_result.borough }})</p>
+            <p><strong>Incidents:</strong> {{ user_result.incidents }},
+               <strong>Severity Points:</strong> {{ user_result.severity_points }},
+               <strong>Risk Score:</strong> {{ user_result.risk_score }}</p>
+            {% set lvl = user_result.risk_level.lower() %}
+            <p><span class="risk {{ 'low' if lvl=='low' else ('moderate' if lvl=='moderate' else 'high') }}">
+              {{ user_result.risk_level }} Risk
+            </span>
+            <small style="margin-left:6px;">(relative to all postal codes)</small></p>
+          </div>
+        {% endif %}
+      </div>
+    </div>
+  </body>
+</html>

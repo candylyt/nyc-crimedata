@@ -1,0 +1,62 @@
+<html>
+  <style>
+    body { font-family: arial; font-size: 15pt; }
+    .top-bar { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; }
+    .title { font-size:28px; font-weight:bold; }
+    .tabs a { margin-left:8px; text-decoration:none; padding:6px 10px; border:1px solid #000; border-radius:4px; color:#000; }
+    .tabs a.active { background:#000; color:#fff; }
+    .kv p { margin:6px 0; }
+    .section { margin-top:18px; }
+  </style>
+  <body>
+    <div class="top-bar">
+      <div class="title">NYC Crime Data</div>
+      <div class="tabs">
+        <a href="{{ url_for('index') }}" class="active">General User</a>
+        <a href="{{ url_for('admin_index') }}">Administrator</a>
+      </div>
+    </div>
+
+    <h2>Incident #{{ incident.incident_id }}</h2>
+
+    <div class="kv">
+      <p><strong>Occurred Date:</strong> {{ incident.occurred_date }}</p>
+      <p><strong>Status:</strong> {{ incident.status }}</p>
+      <p><strong>Crime Type:</strong> {{ incident.crime_type }} ({{ incident.category }})</p>
+      <p><strong>Severity:</strong> {{ incident.severity }}</p>
+      <p><strong>Borough:</strong> {{ incident.borough }} {{ incident.postal_code }}</p>
+      <p><strong>Jurisdiction:</strong> {{ incident.jurisdiction }}</p>
+      <p><strong>Description:</strong> {{ incident.description or '(no details)' }}</p>
+    </div>
+
+    <div class="section">
+      <h3>Suspects</h3>
+      {% if suspects %}
+        <ul>
+          {% for s in suspects %}
+            <li>#{{ s.suspect_id }} — {{ s.gender or '?' }}/{{ s.race or '?' }},
+                {{ s.age_grp or '?' }}, Arrested: {{ 'Yes' if s.arrest_status else 'No' }}</li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p>(none)</p>
+      {% endif %}
+    </div>
+
+    <div class="section">
+      <h3>Victims</h3>
+      {% if victims %}
+        <ul>
+          {% for v in victims %}
+            <li>#{{ v.victim_id }} — {{ v.gender or '?' }}/{{ v.race or '?' }},
+                {{ v.age_grp or '?' }}, Injury: {{ v.injury_severity or 'Unknown' }}</li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p>(none)</p>
+      {% endif %}
+    </div>
+
+    <p class="section"><a href="{{ url_for('index') }}">← Back to list</a></p>
+  </body>
+</html>
