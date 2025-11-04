@@ -217,7 +217,6 @@ def admin_index():
         page_numbers=page_numbers,
         make_url=make_url_admin,
     )
-
 @app.route('/admin/<int:incident_id>', methods=['GET', 'POST'])
 def admin_incident_detail(incident_id):
     # Incident core
@@ -260,9 +259,9 @@ def admin_incident_detail(incident_id):
     """), {"incident_id": incident_id}).mappings().all()
 
     if request.method == "POST":
-        action = request.form.get("action")
+        action = (request.form.get("action") or "").strip()
 
-        # Update status (Open/Closed)
+        # 1) Update status
         if action == "update_status":
             new_status = (request.form.get("new_status") or "").strip()
             if new_status in ("Open", "Closed"):
@@ -272,14 +271,14 @@ def admin_incident_detail(incident_id):
                 g.conn.commit()
             return redirect(url_for("admin_incident_detail", incident_id=incident_id))
 
-        # Delete incident (false report) -> back to admin list with banner
+        # 2) Delete incident
         if action == "delete_incident":
             g.conn.execute(text("DELETE FROM incident WHERE incident_id = :id"), {"id": incident_id})
             g.conn.commit()
             flash(f"Incident #{incident_id} was deleted as a false report.", "success")
             return redirect(url_for("admin_index"))
 
-        # Update suspect arrest status (Yes/No)
+        # 3) Toggle suspect arrest
         if action == "update_suspect_arrest":
             sid = request.form.get("suspect_id")
             val = request.form.get("arrest_status")  # "Yes" / "No"
@@ -292,7 +291,76 @@ def admin_incident_detail(incident_id):
                 g.conn.commit()
             return redirect(url_for("admin_incident_detail", incident_id=incident_id))
 
-    # No end-date parsing or UI anymore
+        # 4) Update description  (uses incident_details column)
+        if action == "update_description":
+            new_desc = (request.form.get("incident_details") or request.form.get("new_description") or "").strip()
+            g.conn.execute(
+                text("UPDATE incident SET incident_details = :d WHERE incident_id = :iid"),
+                {"d": new_desc or None, "iid": incident_id},
+            )
+            g.conn.commit()
+            flash("Incident description updated.", "success")
+            return redirect(url_for("admin_incident_detail", incident_id=incident_id))
+
+        # 5) Add Suspect  (matches your form names: s_gender, s_race, s_age_grp, s_arrest)
+        if action == "add_suspect":
+            s_gender = (request.form.get("s_gender") or "").strip()
+            s_race = (request.form.get("s_race") or "").strip()
+            s_age = (request.form.get("s_age_grp") or "").strip()
+            s_arrest = (request.form.get("s_arrest") or "No").strip()
+
+            # minimal validation to avoid empty rows
+            if s_gender in ("Female", "Male") and s_age in ("<18", "18-24", "25-44", "45-64", "65+"):
+                g.conn.execute(text("""
+                    INSERT INTO suspect (incident_id, gender, race, age_grp, arrest_status)
+                    VALUES (:iid, :g, :r, :age, :ar)
+                """), {
+                    "iid": incident_id,
+                    "g": s_gender,
+                    "r": (s_race or None),
+                    "age": s_age,
+                    "ar": (s_arrest == "Yes"),
+                })
+                g.conn.commit()
+                flash("Suspect added.", "success")
+            else:
+                flash("Please select a valid Gender and Age Group for the suspect.", "error")
+
+            return redirect(url_for("admin_incident_detail", incident_id=incident_id))
+
+        # 6) Add Victim  (matches your form names: v_gender, v_race, v_age_grp, v_injury)
+        if action == "add_victim":
+            v_gender = (request.form.get("v_gender") or "").strip()
+            v_race = (request.form.get("v_race") or "").strip()
+            v_age = (request.form.get("v_age_grp") or "").strip()
+            v_injury = (request.form.get("v_injury") or "").strip()
+
+            # Must satisfy Victim CHECK constraints:
+            # gender in ('Female','Male'), injury_severity in ('None','Minor','Severe','Fatal'), age_grp in ('<18','18-24','25-44','45-64','65+')
+            if v_gender in ("Female", "Male") and v_age in ("<18", "18-24", "25-44", "45-64", "65+") and v_injury in (
+                    "None", "Minor", "Severe", "Fatal"):
+                g.conn.execute(text("""
+                    INSERT INTO victim (incident_id, gender, race, injury_severity, age_grp)
+                    VALUES (:iid, :g, :r, :inj, :age)
+                """), {
+                    "iid": incident_id,
+                    "g": v_gender,
+                    "r": (v_race or None),
+                    "inj": v_injury,
+                    "age": v_age,
+                })
+                g.conn.commit()
+                flash("Victim added.", "success")
+            else:
+                flash("Please select valid Gender, Age Group, and Injury Severity for the victim.", "error")
+
+            return redirect(url_for("admin_incident_detail", incident_id=incident_id))
+
+        # If we get here, unknown action; just bounce back.
+        flash("Unknown action.", "error")
+        return redirect(url_for("admin_incident_detail", incident_id=incident_id))
+
+    # Render
     return render_template(
         "admin_detail.html",
         incident=incident,
@@ -562,101 +630,174 @@ def admin_system():
 ######################################### above is admin functions ######################################################
 @app.route("/recommendations", methods=["GET"])
 def recommendations():
-    # --- Top 10 safest (postal_code, borough) pairs ---
+    """
+    Personalized recommendations using demographic match rate:
+      demo_pct = demo_incidents / total_incidents (per postal_code+borough)
+    A victim "matches" if at least one victim in the incident has
+    (gender == :gender) AND/OR (age_grp == :age_grp) AND/OR (race == :race),
+    for any fields the user actually provided.
+    """
+    # --- incoming filters used for BOTH sections ---
+    postal = (request.args.get("postal_code") or "").strip()
+    gender = (request.args.get("gender") or "").strip()
+    age_grp = (request.args.get("age_grp") or "").strip()
+    race   = (request.args.get("race") or "").strip()
+
+    params = {"gender": gender, "age_grp": age_grp, "race": race}
+
+    # ------------------------------------------------------------
+    # Section A: Top 10 "safest" (lowest demographic match %)
+    # ------------------------------------------------------------
+    # Notes:
+    # - We only include rows with BOTH postal_code and borough present.
+    # - If no demographic filters were supplied (all empty), demo_incidents == total_incidents,
+    #   so demo_pct == 100% for all rows. That’s expected: “people like me” == everyone.
     top10_sql = """
-            WITH agg AS (
+    WITH base AS (
+      SELECT
+        i.incident_id,
+        a.postal_code::text AS postal_code,
+        a.borough
+      FROM incident i
+      JOIN address a        ON a.address_id = i.address_id
+      WHERE a.postal_code IS NOT NULL
+        AND a.postal_code <> ''
+        AND a.borough IS NOT NULL
+        AND a.borough <> ''
+    ),
+    tot AS (
+      SELECT
+        b.postal_code,
+        b.borough,
+        COUNT(DISTINCT b.incident_id) AS total_incidents
+      FROM base b
+      GROUP BY b.postal_code, b.borough
+    ),
+    demo AS (
+      SELECT
+        b.postal_code,
+        b.borough,
+        COUNT(DISTINCT b.incident_id) AS demo_incidents
+      FROM base b
+      WHERE
+        -- If all demographic filters are empty, count EVERY incident as matching.
+        (:gender = '' AND :age_grp = '' AND :race = '')
+        OR EXISTS (
+            SELECT 1
+            FROM victim v
+            WHERE v.incident_id = b.incident_id
+              AND (:gender  = '' OR v.gender = :gender)
+              AND (:age_grp = '' OR v.age_grp = :age_grp)
+              AND (:race    = '' OR v.race   = :race)
+        )
+      GROUP BY b.postal_code, b.borough
+    )
+    SELECT
+      t.postal_code,
+      t.borough,
+      t.total_incidents,
+      COALESCE(d.demo_incidents, 0) AS demo_incidents,
+      CASE WHEN t.total_incidents = 0
+           THEN 0.0
+           ELSE ROUND(100.0 * COALESCE(d.demo_incidents,0) / t.total_incidents, 2)
+      END AS demo_pct
+    FROM tot t
+    LEFT JOIN demo d
+      ON d.postal_code = t.postal_code AND d.borough = t.borough
+    -- SAFEST first = lowest demographic match percentage.
+    ORDER BY demo_pct ASC, t.total_incidents DESC, t.postal_code ASC
+    LIMIT 10;
+    """
+    top_rows = g.conn.execute(text(top10_sql), params).mappings().all()
+
+    # Build a simple column header list for the table
+    top_cols = ["Postal Code", "Borough", "Total Incidents", "Matching Incidents", "Match %"]
+
+    # ------------------------------------------------------------
+    # Section B: Risk for a specific postal code (optional)
+    # ------------------------------------------------------------
+    user_result = None
+    risk_bucket = None
+
+    if postal:
+        row = g.conn.execute(
+            text("""
+            WITH tot AS (
               SELECT
                 a.postal_code::text AS postal_code,
                 a.borough           AS borough,
-                COUNT(*)            AS incidents,
-                SUM(
-                  CASE ct.severity
-                    WHEN 'low'    THEN 1
-                    WHEN 'medium' THEN 3
-                    WHEN 'high'   THEN 5
-                    ELSE 0
-                  END
-                ) AS severity_points
+                COUNT(DISTINCT i.incident_id) AS total_incidents
               FROM incident i
-              JOIN address a        ON a.address_id = i.address_id
-              JOIN classified_as ca ON ca.incident_id = i.incident_id
-              JOIN crimetype ct     ON ct.crime_type_id = ca.crime_type_id
-              WHERE a.postal_code IS NOT NULL
-                AND a.borough     IS NOT NULL
-                AND a.postal_code::text <> ''
-                AND a.borough <> ''
-                AND a.postal_code::text ~ '^\d{5}$'
+              JOIN address a ON a.address_id = i.address_id
+              WHERE a.postal_code::text = :zip
               GROUP BY a.postal_code, a.borough
+            ),
+            demo AS (
+              SELECT
+                COUNT(DISTINCT i.incident_id) AS demo_incidents
+              FROM incident i
+              JOIN address a ON a.address_id = i.address_id
+              WHERE a.postal_code::text = :zip
+                AND (
+                  (:gender = '' AND :age_grp = '' AND :race = '')
+                  OR EXISTS (
+                      SELECT 1
+                      FROM victim v
+                      WHERE v.incident_id = i.incident_id
+                        AND (:gender  = '' OR v.gender = :gender)
+                        AND (:age_grp = '' OR v.age_grp = :age_grp)
+                        AND (:race    = '' OR v.race   = :race)
+                  )
+                )
             )
             SELECT
-              postal_code,
-              borough,
-              incidents,
-              severity_points,
-              (incidents + severity_points) AS risk_score
-            FROM agg
-            ORDER BY risk_score ASC, incidents ASC, postal_code ASC
-            LIMIT 10;
+              t.postal_code,
+              t.borough,
+              t.total_incidents,
+              COALESCE(d.demo_incidents,0) AS demo_incidents,
+              CASE WHEN t.total_incidents = 0
+                   THEN 0.0
+                   ELSE ROUND(100.0 * COALESCE(d.demo_incidents,0) / t.total_incidents, 2)
+              END AS demo_pct
+            FROM tot t
+            CROSS JOIN demo d
+            """),
+            {"zip": postal, **params},
+        ).mappings().first()
 
-    """
-    top_rows = g.conn.execute(text(top10_sql)).mappings().all()
-
-    # --- Single ZIP risk check ---
-    postal_code = (request.args.get("postal_code") or "").strip()
-    user_result = None
-    if postal_code:
-        zip_sql = """
-        WITH agg AS (
-            SELECT
-                a.postal_code::text AS postal_code,
-                a.borough           AS borough,
-                COUNT(*)            AS incidents,
-                SUM(
-                    CASE ct.severity
-                        WHEN 'low'    THEN 1
-                        WHEN 'medium' THEN 3
-                        WHEN 'high'   THEN 5
-                        ELSE 0
-                    END
-                ) AS severity_points
-            FROM incident i
-            JOIN address a        ON a.address_id = i.address_id
-            JOIN classified_as ca ON ca.incident_id = i.incident_id
-            JOIN crimetype ct     ON ct.crime_type_id = ca.crime_type_id
-            WHERE a.postal_code = :zip
-              AND a.postal_code <> ''        -- optional: avoid blank zips
-              AND a.borough IS NOT NULL
-              AND a.borough <> ''
-            GROUP BY a.postal_code, a.borough   -- <<< this was missing
-        )
-        SELECT
-            postal_code,
-            borough,
-            incidents,
-            severity_points,
-            (incidents + severity_points) AS risk_score
-        FROM agg;
-        """
-
-        row = g.conn.execute(text(zip_sql), {"zip": postal_code}).mappings().first()
         if row:
-            score = row["risk_score"]
-            risk_level = "Low" if score <= 10 else ("Moderate" if score <= 25 else "High")
+            pct = float(row["demo_pct"])
+            # Buckets — tweak thresholds if you prefer
+            if pct <= 10:
+                risk_bucket = "Low"
+            elif pct <= 25:
+                risk_bucket = "Moderate"
+            else:
+                risk_bucket = "High"
+
             user_result = {
                 "postal_code": row["postal_code"],
                 "borough": row["borough"],
-                "incidents": row["incidents"],
-                "severity_points": row["severity_points"],
-                "risk_score": score,
-                "risk_level": risk_level,
+                "total_incidents": row["total_incidents"],
+                "demo_incidents": row["demo_incidents"],
+                "demo_pct": pct,
             }
 
     return render_template(
         "recommendations.html",
+        # top-10 table
         top_rows=top_rows,
-        postal_code=postal_code,
+        top_cols=top_cols,
+        # echo the filters back to the page
+        postal_code=postal,
+        gender=gender,
+        age_grp=age_grp,
+        race=race,
+        # right-side card
         user_result=user_result,
+        risk_bucket=risk_bucket,
     )
+
 
 ######################################### above is personalized recommendation functions ######################################################
 @app.route('/incident/<int:incident_id>', methods=['GET'])

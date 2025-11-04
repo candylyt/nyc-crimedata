@@ -1,108 +1,157 @@
 <html>
   <style>
-    .btn-sky {
-      background: #e6f2ff;
-      border: 1px solid #9cc9ff;
-      color: #0b4a8b;
-      border-radius: 6px;
-      text-decoration: none;
-      padding: 6px 12px;
-    }
-    .btn-sm { font-size: 14px; line-height: 1.2; padding: 4px 10px; }
-    .btn-sky:hover { background:#d8ecff; border-color:#86bfff; }
-
     body { font-family: arial; font-size: 15pt; }
-    .top-bar { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; }
+    .top-bar { display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; }
     .title { font-size:28px; font-weight:bold; }
     .tabs a { margin-left:8px; text-decoration:none; padding:6px 10px; border:1px solid #000; border-radius:4px; color:#000; }
-    .tabs a.active { background:#000; color:#fff; }
+      .tabs a.active { background:#000; color:#fff; }
+    /* No active tab here—Recommendations tab removed */
+    /* Light-blue back button */
+    .btn-sky {
+      background:#e6f2ff;
+      border:1px solid #9cc9ff;
+      color:#0b4a8b;
+      border-radius:6px;
+      text-decoration:none;
+    }
+    .btn-sm { font-size:14px; padding:4px 10px; line-height:1.2; }
+    .btn-sky:hover { background:#d8ecff; border-color:#86bfff; }
 
+    /* Back button row directly under tabs, right aligned */
+    .back-row { display:flex; justify-content:flex-end; margin: 6px 0 14px; }
+
+    /* (keep your existing styles for cards/tables/forms below) */
     .grid { display:grid; grid-template-columns: 1fr 1fr; gap: 20px; }
     .card { border:1px solid #ddd; border-radius:8px; padding:14px; }
-    h2 { margin: 6px 0 12px; }
-
+    h2 { margin:6px 0 12px; }
     table { border-collapse: collapse; width: 100%; margin-top: 8px; }
-    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-    th { background: #f2f2f2; }
-
+    th, td { border:1px solid #ddd; padding:8px; text-align:left; }
+    th { background:#f2f2f2; }
     .risk { font-weight:bold; padding:3px 8px; border-radius:6px; display:inline-block; }
     .risk.low { background:#eef9f0; color:#1a7f37; border:1px solid #bfe3c6; }
     .risk.moderate { background:#fff8e6; color:#8d6a00; border:1px solid #f2d48a; }
     .risk.high { background:#fff3f3; color:#b00020; border:1px solid #f1c0c0; }
-
-    .form-row { display:flex; gap:10px; align-items:center; margin-top:8px; }
-    input[type="text"] { padding:6px 8px; }
-    button { padding:6px 10px; }
+    .form-grid { display:grid; grid-template-columns: repeat(4, 1fr); gap:10px; align-items:end; }
+    .form-grid .wide { grid-column: 1 / -1; }
+    .hint { color:#666; font-size:12px; margin-top:4px; }
+    input[type="text"], select, button { padding:6px 8px; }
   </style>
+
   <body>
     <div class="top-bar">
       <div class="title">NYC Crime Data</div>
       <div class="tabs">
-        <a href="{{ url_for('index') }}">General User</a>
-        <a href="{{ url_for('admin_index') }}">Administrator</a>
+      <a href="{{ url_for('index') }}" class="active" aria-current="page">General User</a>
+      <a href="{{ url_for('admin_index') }}">Administrator</a>
       </div>
     </div>
-<div style="display:flex; justify-content:flex-end; margin:8px 0 12px;">
-  <a href="{{ url_for('index') }}" class="btn-sky btn-sm">← Back to Incidents</a>
-</div>
+
+    <!-- Right-aligned Back button under the tabs -->
+    <div class="back-row">
+      <a href="{{ url_for('index') }}" class="btn-sky btn-sm">← Back</a>
+    </div>
+
+    <!-- Shared demographic filter form (applies to BOTH sections) -->
+    <form method="get" action="{{ url_for('recommendations') }}" class="card" style="margin-bottom:16px;">
+      <h2>Personalize by Demographics</h2>
+      <div class="form-grid">
+        <div>
+          <label>Postal Code (for right panel)</label>
+          <input type="text" name="postal_code" value="{{ postal_code or '' }}" placeholder="e.g., 10027" />
+          <div class="hint">Optional for Top 10; used by the right panel.</div>
+        </div>
+        <div>
+          <label>Gender</label>
+          <select name="gender">
+            {% set gsel = (gender or '') %}
+            <option value="">(Any)</option>
+            <option value="Male"   {% if gsel == "Male" %}selected{% endif %}>Male</option>
+            <option value="Female" {% if gsel == "Female" %}selected{% endif %}>Female</option>
+          </select>
+        </div>
+        <div>
+          <label>Age Group</label>
+          {% set asel = (age_grp or '') %}
+          <select name="age_grp">
+            <option value="">(Any)</option>
+            {% for a in ["<18","18-24","25-44","45-64","65+"] %}
+              <option value="{{ a }}" {% if asel == a %}selected{% endif %}>{{ a }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <label>Race</label>
+          {% set rsel = (race or '') %}
+          <select name="race">
+            <option value="">(Any)</option>
+            {% for r in ["BLACK","WHITE","WHITE HISPANIC","BLACK HISPANIC","ASIAN / PACIFIC ISLANDER","AMERICAN INDIAN/ALASKAN NATIVE"] %}
+              <option value="{{ r }}" {% if rsel == r %}selected{% endif %}>{{ r }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="wide" style="display:flex; gap:10px; margin-top:6px;">
+          <button type="submit">Apply</button>
+          <a href="{{ url_for('recommendations') }}">Clear</a>
+        </div>
+      </div>
+    </form>
 
     <div class="grid">
-      <!-- Left: Top 10 Safest Postal Codes -->
+      <!-- Left: Top 10 Safest Areas (by lowest demographic match %) -->
       <div class="card">
-        <h2>Top 10 Safest Area in NYC</h2>
-        <p style="margin:0 0 6px;">Sorted by a weighted score: <em>incidents + severity points</em> (low=1, medium=3, high=5).</p>
-        <table>
-        <thead>
-          <tr>
-            <th>Postal Code</th>
-            <th>Borough</th>
-            <th>Incidents</th>
-            <th>Severity Points</th>
-            <th>Risk Score</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for r in top_rows %}
-            <tr>
-              <td>{{ r.postal_code }}</td>
-              <td>{{ r.borough }}</td>
-              <td>{{ r.incidents }}</td>
-              <td>{{ r.severity_points }}</td>
-              <td>{{ r.risk_score }}</td>
-            </tr>
-          {% endfor %}
-        </tbody>
+        <h2>Top 10 Safest Areas (for your demographic)</h2>
+        <p class="hint" style="margin:0 0 6px;">
+          “Matching Incidents” = incidents in which at least one victim matches the gender/age/race you set above.
+          Lower % ⇒ fewer incidents involving people like you.
+        </p>
 
+        <table>
+          <thead>
+            <tr>
+              {% for c in top_cols %}<th>{{ c }}</th>{% endfor %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for r in top_rows %}
+              <tr>
+                <td>{{ r.postal_code }}</td>
+                <td>{{ r.borough }}</td>
+                <td>{{ r.total_incidents }}</td>
+                <td>{{ r.demo_incidents }}</td>
+                <td>{{ r.demo_pct }}%</td>
+              </tr>
+            {% endfor %}
+            {% if not top_rows %}
+              <tr><td colspan="5">No data found.</td></tr>
+            {% endif %}
+          </tbody>
         </table>
       </div>
 
       <!-- Right: Your Postal Code Risk -->
       <div class="card">
         <h2>Assess Risk in Your Neighborhood</h2>
-        <form method="get" action="{{ url_for('recommendations') }}">
-          <div class="form-row">
-            <label>Postal Code</label>
-            <input type="text" name="postal_code" value="{{ postal_code or '' }}" placeholder="e.g., 10027" />
-            <button type="submit">Check</button>
-          </div>
-        </form>
-
-        {% if postal_code and not user_result %}
-          <p style="margin-top:10px;">No incidents found for <strong>{{ postal_code }}</strong> in the dataset.</p>
+        {% if not user_result and postal_code %}
+          <p>No incidents found for <strong>{{ postal_code }}</strong> in the dataset.</p>
         {% endif %}
 
         {% if user_result %}
-          <div style="margin-top:10px;">
-            <p><strong>Postal Code:</strong> {{ user_result.postal_code }} ({{ user_result.borough }})</p>
-            <p><strong>Incidents:</strong> {{ user_result.incidents }},
-               <strong>Severity Points:</strong> {{ user_result.severity_points }},
-               <strong>Risk Score:</strong> {{ user_result.risk_score }}</p>
-            {% set lvl = user_result.risk_level.lower() %}
-            <p><span class="risk {{ 'low' if lvl=='low' else ('moderate' if lvl=='moderate' else 'high') }}">
-              {{ user_result.risk_level }} Risk
+          <p><strong>Postal Code:</strong> {{ user_result.postal_code }} ({{ user_result.borough }})</p>
+          <p>
+            <strong>Total Incidents:</strong> {{ user_result.total_incidents }}<br>
+            <strong>Matching Incidents (your demographic):</strong> {{ user_result.demo_incidents }}<br>
+            <strong>Likelihood to become a target:</strong> {{ user_result.demo_pct }}%
+          </p>
+          {% set bucket = (risk_bucket or '').lower() %}
+          <p>
+            <span class="risk {{ 'low' if bucket=='low' else ('moderate' if bucket=='moderate' else 'high') }}">
+              {{ risk_bucket or '—' }} Risk
             </span>
-            <small style="margin-left:6px;">(relative to all postal codes)</small></p>
-          </div>
+            <span class="hint"> (based on share of incidents involving your demographic)</span>
+          </p>
+        {% else %}
+          <p class="hint">Enter a postal code above and click Apply to see your risk.</p>
         {% endif %}
       </div>
     </div>
