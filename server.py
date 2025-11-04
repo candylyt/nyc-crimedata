@@ -1045,10 +1045,74 @@ def incidents_analysis():
 	custom_columns = custom_cursor.keys()
 	custom_cursor.close()
 
+
+    # query 3: crime trend over time
+
+    # set up
+	crime_types = g.conn.execute(text("""
+        SELECT ct.crime_type_id, ct.crime_type, ct.severity, lc.category
+        FROM crimetype ct
+        JOIN lawcategory lc ON lc.law_cat_id = ct.law_cat_id
+        ORDER BY lc.category, ct.crime_type
+    """)).mappings().all()
+
+    # user inputs
+	year_from = request.args.get("year_from")
+	year_to = request.args.get("year_to")
+	crime_type_id = request.args.get("crime_type_id")
+	trend_borough = request.args.get("trend_borough")
+
+	trend_filters = []
+	trend_parameters = {}
+
+	if year_from:
+		trend_filters.append("i.occurred_date >= :year_from")
+		trend_parameters["year_from"] = f"{int(year_from)}-01-01"
+
+	if year_to:
+		trend_filters.append("i.occurred_date <= :year_to")
+		trend_parameters["year_to"] = f"{int(year_to)}-12-31"
+
+	if crime_type_id:
+		trend_filters.append("ct.crime_type_id = :crime_type_id")
+		trend_parameters["crime_type_id"] = crime_type_id
+
+	if trend_borough:
+		trend_filters.append("a.borough = :trend_borough")
+		trend_parameters["trend_borough"] = trend_borough
+
+	if trend_filters:
+		where_clause_trend = "WHERE " + " AND ".join(trend_filters)
+	else:
+		where_clause_trend = ""
+
+
+    # query 3: crime trend over time
+	crime_trend_sql = f"""
+    SELECT 
+        EXTRACT(YEAR FROM i.occurred_date)::INT AS year,
+        COUNT(*) AS num_incidents
+    FROM incident i
+        JOIN classified_as ca ON i.incident_id = ca.incident_id
+        JOIN crimetype ct ON ca.crime_type_id = ct.crime_type_id
+        JOIN address a ON i.address_id = a.address_id
+    {where_clause_trend}
+    GROUP BY year
+    ORDER BY year;
+    """
+
+    # execute query & store results
+	trend_cursor = g.conn.execute(text(crime_trend_sql), trend_parameters)
+	trend_rows = trend_cursor.fetchall()
+	trend_columns = trend_cursor.keys()
+	trend_cursor.close()
+
+
 	return render_template(
         "incidents-analysis.html", 
         rows=rows, columns=columns, window=window, borough=borough, postal_code=postal_code,
-        custom_rows=custom_rows, custom_columns=custom_columns, custom_postal_code=custom_postal_code, custom_gender=custom_gender, custom_age_group=custom_age_group, custom_ethnicity=custom_ethnicity
+        custom_rows=custom_rows, custom_columns=custom_columns, custom_postal_code=custom_postal_code, custom_gender=custom_gender, custom_age_group=custom_age_group, custom_ethnicity=custom_ethnicity,
+        trend_rows=trend_rows, trend_columns=trend_columns, crime_types=crime_types, crime_type_id=crime_type_id, year_from=year_from, year_to=year_to, trend_borough=trend_borough
     )
 
 # Example of adding new data to the database

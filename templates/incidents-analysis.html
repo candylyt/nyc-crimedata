@@ -92,7 +92,7 @@
     <!-- Top 10 crime types per borough -->
     <div class="section" id="fixed10">
       <h2>Top 10 Crime Types in New York City</h2>
-      <form class="controls" method="get" action="{{ url_for('incidents_analysis') }}">
+      <form class="controls" method="get" action="{{ url_for('incidents_analysis') }}#fixed10">
         <div>
           <label>Time Window</label>
           <select name="window" id="window-select">
@@ -123,7 +123,7 @@
 
         <div class="actions">
           <button class="btn" type="submit">Run</button>
-          <a class="btn secondary" href="{{ url_for('incidents_analysis') }}">Reset</a>
+          <a class="btn secondary" href="{{ url_for('incidents_analysis') }}#fixed10">Reset</a>
         </div>
       </form>
 
@@ -157,7 +157,7 @@
     <!-- Custom incident filters -->
     <div class="section" id="custom-filters">
       <h2>Custom Incident Filters</h2>
-      <form class="controls" method="get" action="{{ url_for('incidents_analysis') }}">
+      <form class="controls" method="get" action="{{ url_for('incidents_analysis') }}#custom-filters">
 
         <div>
           <label>Victim's Gender</label>
@@ -199,7 +199,7 @@
 
         <div class="actions">
           <button class="btn" type="submit">Run</button>
-          <a class="btn secondary" href="{{ url_for('incidents_analysis') }}">Reset</a>
+          <a class="btn secondary" href="{{ url_for('incidents_analysis') }}#custom-filters">Reset</a>
         </div>
       </form>
 
@@ -227,6 +227,80 @@
       {% endif %}
     </div>
 
+    <!-- Crime Trend Over Time -->
+    <div class="section" id="crime-trend">
+      <h2>Crime Trend Over Time</h2>
 
+      <form class="controls" method="get" action="{{ url_for('incidents_analysis') }}#crime-trend">
+
+        <div style="margin-right: 20px;">
+          <label>Year From</label>
+          <input type="number" name="year_from" min="1981" max="2025"
+                value="{{ year_from or '' }}" placeholder="e.g. 2010">
+        </div>
+
+        <div style="margin-right: 20px;">
+          <label>Year To</label>
+          <input type="number" name="year_to" min="1981" max="2025"
+                value="{{ year_to or '' }}" placeholder="e.g. 2015">
+        </div>
+
+        <div>
+          <label>Crime Type</label>
+          <select name="crime_type_id">
+            <option value="">-- Select --</option>
+            {% for c in crime_types %}
+              <option value="{{ c.crime_type_id }}"
+                {% if crime_type_id|string == c.crime_type_id|string %}selected{% endif %}>
+                {{ c.category }} · {{ c.crime_type }} ({{ c.severity }})
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div>
+          <label>Borough</label>
+          {% set selected_borough = request.args.get('trend_borough', '') %}
+          <select name="trend_borough">
+            <option value="">(All Boroughs)</option>
+            {% for b in ["MANHATTAN", "BROOKLYN", "QUEENS", "BRONX", "STATEN ISLAND"] %}
+              <option value="{{ b }}" {% if selected_borough == b %}selected{% endif %}>{{ b }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="actions">
+          <button class="btn" type="submit">Run</button>
+          <a class="btn secondary" href="{{ url_for('incidents_analysis') }}#crime-trend">Reset</a>
+        </div>
+      
+      </form> 
+      
+
+      {% if trend_rows %}
+      <table>
+        <thead>
+          <tr>
+            {% for col in trend_columns %}
+              <th>{{ col }}</th>
+            {% endfor %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in trend_rows %}
+            <tr>
+              {% for cell in row %}
+                <td>{{ cell }}</td>
+              {% endfor %}
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p class="note">No results for the selected filters.</p>
+      {% endif %}
+    </div>
+
+    
   </body>
 </html>
