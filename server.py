@@ -637,6 +637,9 @@ def index():
 	postal_code = request.args.get("postal_code")
 	date_start = request.args.get("date_start")
 	date_end = request.args.get("date_end")
+	victim_gender = request.args.get("victim_gender")
+	victim_age_grp = request.args.get("victim_age_grp")
+	victim_ethnicity = request.args.get("victim_ethnicity")
 
 	filters = []
 	parameters = {}
@@ -674,6 +677,18 @@ def index():
 		filters.append("i.occurred_date <= :date_end")
 		parameters["date_end"] = date_end
 
+	if victim_gender:
+		filters.append("v.gender = :victim_gender")
+		parameters["victim_gender"] = victim_gender
+
+	if victim_age_grp:
+		filters.append("v.age_grp = :victim_age_grp")
+		parameters["victim_age_grp"] = victim_age_grp
+
+	if victim_ethnicity:
+		filters.append("v.race = :victim_ethnicity")
+		parameters["victim_ethnicity"] = victim_ethnicity
+
 	# DEBUG: this is debugging code to see what request looks like
 	print(request.args)
 
@@ -690,6 +705,7 @@ def index():
 		JOIN classified_as ca ON i.incident_id = ca.incident_id
 		JOIN crimetype ct ON ca.crime_type_id = ct.crime_type_id
 		JOIN lawcategory lc ON lc.law_cat_id = ct.law_cat_id
+        JOIN victim v ON v.incident_id = i.incident_id
 	{where_clause}
 	"""
 
@@ -707,6 +723,7 @@ def index():
 		JOIN classified_as ca ON i.incident_id = ca.incident_id
 		JOIN crimetype ct ON ca.crime_type_id = ct.crime_type_id
 		JOIN lawcategory lc ON lc.law_cat_id = ct.law_cat_id
+        JOIN victim v ON v.incident_id = i.incident_id
 	{where_clause}
 	ORDER BY i.occurred_date DESC
 	LIMIT :limit OFFSET :offset;
@@ -733,6 +750,12 @@ def index():
 		base_args["severity"] = severity
 	if crime_type:
 		base_args["crime_type"] = crime_type
+	if victim_gender:
+		base_args["victim_gender"] = victim_gender
+	if victim_age_grp:
+		base_args["victim_age_grp"] = victim_age_grp    
+	if victim_ethnicity:
+		base_args["victim_ethnicity"] = victim_ethnicity    
 
 	window = 3
 	start = max(page - window, 1)
