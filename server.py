@@ -217,7 +217,6 @@ def admin_index():
         page_numbers=page_numbers,
         make_url=make_url_admin,
     )
-
 @app.route('/admin/<int:incident_id>', methods=['GET', 'POST'])
 def admin_incident_detail(incident_id):
     # Incident core
@@ -260,9 +259,9 @@ def admin_incident_detail(incident_id):
     """), {"incident_id": incident_id}).mappings().all()
 
     if request.method == "POST":
-        action = request.form.get("action")
+        action = (request.form.get("action") or "").strip()
 
-        # Update status (Open/Closed)
+        # 1) Update status
         if action == "update_status":
             new_status = (request.form.get("new_status") or "").strip()
             if new_status in ("Open", "Closed"):
@@ -272,14 +271,14 @@ def admin_incident_detail(incident_id):
                 g.conn.commit()
             return redirect(url_for("admin_incident_detail", incident_id=incident_id))
 
-        # Delete incident (false report) -> back to admin list with banner
+        # 2) Delete incident
         if action == "delete_incident":
             g.conn.execute(text("DELETE FROM incident WHERE incident_id = :id"), {"id": incident_id})
             g.conn.commit()
             flash(f"Incident #{incident_id} was deleted as a false report.", "success")
             return redirect(url_for("admin_index"))
 
-        # Update suspect arrest status (Yes/No)
+        # 3) Toggle suspect arrest
         if action == "update_suspect_arrest":
             sid = request.form.get("suspect_id")
             val = request.form.get("arrest_status")  # "Yes" / "No"
@@ -292,7 +291,76 @@ def admin_incident_detail(incident_id):
                 g.conn.commit()
             return redirect(url_for("admin_incident_detail", incident_id=incident_id))
 
-    # No end-date parsing or UI anymore
+        # 4) Update description  (uses incident_details column)
+        if action == "update_description":
+            new_desc = (request.form.get("incident_details") or request.form.get("new_description") or "").strip()
+            g.conn.execute(
+                text("UPDATE incident SET incident_details = :d WHERE incident_id = :iid"),
+                {"d": new_desc or None, "iid": incident_id},
+            )
+            g.conn.commit()
+            flash("Incident description updated.", "success")
+            return redirect(url_for("admin_incident_detail", incident_id=incident_id))
+
+        # 5) Add Suspect  (matches your form names: s_gender, s_race, s_age_grp, s_arrest)
+        if action == "add_suspect":
+            s_gender = (request.form.get("s_gender") or "").strip()
+            s_race = (request.form.get("s_race") or "").strip()
+            s_age = (request.form.get("s_age_grp") or "").strip()
+            s_arrest = (request.form.get("s_arrest") or "No").strip()
+
+            # minimal validation to avoid empty rows
+            if s_gender in ("Female", "Male") and s_age in ("<18", "18-24", "25-44", "45-64", "65+"):
+                g.conn.execute(text("""
+                    INSERT INTO suspect (incident_id, gender, race, age_grp, arrest_status)
+                    VALUES (:iid, :g, :r, :age, :ar)
+                """), {
+                    "iid": incident_id,
+                    "g": s_gender,
+                    "r": (s_race or None),
+                    "age": s_age,
+                    "ar": (s_arrest == "Yes"),
+                })
+                g.conn.commit()
+                flash("Suspect added.", "success")
+            else:
+                flash("Please select a valid Gender and Age Group for the suspect.", "error")
+
+            return redirect(url_for("admin_incident_detail", incident_id=incident_id))
+
+        # 6) Add Victim  (matches your form names: v_gender, v_race, v_age_grp, v_injury)
+        if action == "add_victim":
+            v_gender = (request.form.get("v_gender") or "").strip()
+            v_race = (request.form.get("v_race") or "").strip()
+            v_age = (request.form.get("v_age_grp") or "").strip()
+            v_injury = (request.form.get("v_injury") or "").strip()
+
+            # Must satisfy Victim CHECK constraints:
+            # gender in ('Female','Male'), injury_severity in ('None','Minor','Severe','Fatal'), age_grp in ('<18','18-24','25-44','45-64','65+')
+            if v_gender in ("Female", "Male") and v_age in ("<18", "18-24", "25-44", "45-64", "65+") and v_injury in (
+                    "None", "Minor", "Severe", "Fatal"):
+                g.conn.execute(text("""
+                    INSERT INTO victim (incident_id, gender, race, injury_severity, age_grp)
+                    VALUES (:iid, :g, :r, :inj, :age)
+                """), {
+                    "iid": incident_id,
+                    "g": v_gender,
+                    "r": (v_race or None),
+                    "inj": v_injury,
+                    "age": v_age,
+                })
+                g.conn.commit()
+                flash("Victim added.", "success")
+            else:
+                flash("Please select valid Gender, Age Group, and Injury Severity for the victim.", "error")
+
+            return redirect(url_for("admin_incident_detail", incident_id=incident_id))
+
+        # If we get here, unknown action; just bounce back.
+        flash("Unknown action.", "error")
+        return redirect(url_for("admin_incident_detail", incident_id=incident_id))
+
+    # Render
     return render_template(
         "admin_detail.html",
         incident=incident,

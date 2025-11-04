@@ -1,111 +1,274 @@
 <html>
   <style>
     body { font-family: arial; font-size: 15pt; }
-    .top-bar { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; }
+    .top-bar { display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; }
     .title { font-size:28px; font-weight:bold; }
-    .tabs a { margin-left:8px; text-decoration:none; padding:6px 10px; border:1px solid #000; border-radius:4px; color:#000; }
+    .tabs { display:flex; gap:8px; align-items:center; }
+    .tabs a { text-decoration:none; padding:6px 10px; border:1px solid #000; border-radius:4px; color:#000; }
     .tabs a.active { background:#000; color:#fff; }
-    .kv p { margin: 6px 0; }
-    .section { margin-top: 18px; }
-    button { padding:6px 10px; }
+     .btn-sky {
+        background:#e6f2ff; border:1px solid #9cc9ff; color:#0b4a8b;
+        border-radius:6px; text-decoration:none; padding:6px 10px;
+      }
+      .btn-sky:hover { background:#d8ecff; border-color:#86bfff; }
 
-    /* header row for title + delete */
-    .header-row { display:flex; align-items:center; gap:12px; }
-    .header-row h2 { margin:0; }
+      /* new: small size variant */
+      .btn-sm { font-size:14px; padding:4px 10px; line-height:1.2; }
+
+      /* new: right-side column so Back sits beneath the tabs */
+      .right-stack { display:flex; flex-direction:column; align-items:flex-end; gap:6px; }
+
+    /* cards/sections */
+    .card { border:1px solid #ddd; border-radius:8px; padding:14px; margin-top:14px; }
+    .card h3 { margin:0 0 8px; }
+
+    .kv p { margin: 6px 0; }
+    .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+
+    /* compact controls */
+    select.sm, input.sm, button.sm { font-size:14px; padding:4px 8px; }
+    select.sm { min-width:110px; }
+    .wide { width:100%; }
+
+    /* danger button */
     .btn-danger {
-      font-weight: 700;
-      color: #b00020;
-      border: 1px solid #b00020;
-      background: transparent;
-      padding: 6px 10px;
-      border-radius: 4px;
-      cursor: pointer;
+      font-weight:700; color:#b00020; border:1px solid #b00020; background:transparent;
+      padding:6px 10px; border-radius:4px; cursor:pointer;
     }
-    .inline-form { display:inline; margin-left:10px; }
+
+    /* lists */
+    ul.clean { margin:0; padding-left:20px; }
+    li.item { margin:8px 0; }
+
+    /* small help text */
+    .help { font-size:12px; color:#666; margin-top:6px; }
+
+    /* two-column grid for add forms on wide screens */
+    .grid-2 { display:grid; grid-template-columns: repeat(2, minmax(320px, 1fr)); gap:12px; }
+    @media (max-width: 900px) { .grid-2 { grid-template-columns: 1fr; } }
+
+    /* inline mini-form for arrest toggle */
+    .inline-form { display:inline-flex; gap:6px; align-items:center; margin-left:10px; }
+    .label { font-size:14px; color:#333; }
   </style>
+
   <body>
-    <!-- header tabs -->
+    <!-- header -->
     <div class="top-bar">
       <div class="title">NYC Crime Data</div>
-      <div class="tabs">
-        <a href="{{ url_for('index') }}">General User</a>
-        <a href="{{ url_for('admin_index') }}" class="active">Administrator</a>
+      <div class="right-stack">
+        <div class="tabs">
+          <a href="{{ url_for('index') }}">General User</a>
+          <a href="{{ url_for('admin_index') }}" class="active">Administrator</a>
+        </div>
+        <a class="btn-sky btn-sm" href="{{ url_for('admin_index') }}">← Back</a>
       </div>
     </div>
+    <!-- flashes -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <style>
+          .flash { padding:8px 12px; border-radius:6px; margin:10px 0; }
+          .flash.success { background:#eef9f0; border:1px solid #bfe3c6; color:#1a7f37; }
+          .flash.error   { background:#fff3f3; border:1px solid #f1c0c0; color:#b00020; }
+          .flash.info    { background:#eaf4ff; border:1px solid #9cc9ff; color:#0b4a8b; }
+        </style>
+        {% for category, msg in messages %}
+          <div class="flash {{ category }}">{{ msg }}</div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
 
-    <!-- Incident title + Delete button -->
-    <div class="header-row">
-      <h2>Incident #{{ incident.incident_id }}</h2>
-      <form method="post" onsubmit="return confirm('Delete this incident?');">
+    <!-- incident header + delete -->
+    <div class="row" style="margin-bottom:6px;">
+      <h2 style="margin:0;">Incident #{{ incident.incident_id }}</h2>
+      <form method="post" onsubmit="return confirm('Delete this incident as a false report?');">
         <input type="hidden" name="action" value="delete_incident">
         <button type="submit" class="btn-danger">Delete (false report)</button>
       </form>
     </div>
 
-    <div class="kv">
-      <p><strong>Occurred Date:</strong> {{ incident.occurred_date }}</p>
-      <p><strong>Status:</strong> {{ incident.status }}</p>
-      <p><strong>Crime Type:</strong> {{ incident.crime_type }} ({{ incident.category }})</p>
-      <p><strong>Severity:</strong> {{ incident.severity }}</p>
-      <p><strong>Borough:</strong> {{ incident.borough }} {{ incident.postal_code }}</p>
-      <p><strong>Jurisdiction:</strong> {{ incident.jurisdiction }}</p>
-      <p><strong>Description:</strong> {{ incident.description or '(no details)' }}</p>
-    </div>
+    <!-- Incident facts + status -->
+    <div class="card">
+      <h3>Incident</h3>
+      <div class="kv">
+        <p><strong>Occurred Date:</strong> {{ incident.occurred_date }}</p>
+        <p><strong>Status:</strong> {{ incident.status }}</p>
+        <p><strong>Crime Type:</strong> {{ incident.crime_type }} ({{ incident.category }})</p>
+        <p><strong>Severity:</strong> {{ incident.severity }}</p>
+        <p><strong>Borough:</strong> {{ incident.borough }} {{ incident.postal_code }}</p>
+        <p><strong>Jurisdiction:</strong> {{ incident.jurisdiction }}</p>
+        <p><strong>Description:</strong> {{ incident.description or '(no details)' }}</p>
+      </div>
 
-    <!-- Status update -->
-    <div class="section">
-      <form method="post" style="display:inline-block; margin-right:12px;">
+      <form method="post" class="row" style="margin-top:10px;">
         <input type="hidden" name="action" value="update_status">
-        <label>Update status:</label>
-        <select name="new_status">
+        <label class="label">Update status:</label>
+        <select name="new_status" class="sm">
           <option value="Open"  {% if incident.status=='Open' %}selected{% endif %}>Open</option>
           <option value="Closed" {% if incident.status=='Closed' %}selected{% endif %}>Closed</option>
         </select>
-        <button type="submit">Save</button>
+        <button type="submit" class="sm">Save</button>
       </form>
     </div>
 
+    <div class="card">
+      <h3>Edit Description</h3>
+      <form method="post">
+        <input type="hidden" name="action" value="update_description">
+        <textarea name="incident_details" rows="3" style="width:100%">{{ incident.description or '' }}</textarea>
+        <div style="display:flex; gap:10px; align-items:center; margin-top:8px;">
+          <button type="submit" class="btn-sky btn-sm">Save Description</button>
+          <small>Keep it factual; this shows on admin views.</small>
+        </div>
+      </form>
+    </div>
+
+
+
+
     <!-- Suspects -->
-    <div class="section">
+    <div class="card">
       <h3>Suspects</h3>
       {% if suspects %}
-        <ul>
-        {% for s in suspects %}
-          <li>
-            #{{ s.suspect_id }} — {{ s.gender or '?' }}/{{ s.race or '?' }}, {{ s.age_grp or '?' }},
-            Arrested: {{ 'Yes' if s.arrest_status else 'No' }}
-            <form method="post" class="inline-form">
-              <input type="hidden" name="action" value="update_suspect_arrest">
-              <input type="hidden" name="suspect_id" value="{{ s.suspect_id }}">
-              <select name="arrest_status">
-                <option value="Yes" {% if s.arrest_status %}selected{% endif %}>Yes</option>
-                <option value="No"  {% if not s.arrest_status %}selected{% endif %}>No</option>
-              </select>
-              <button type="submit">Save</button>
-            </form>
-          </li>
-        {% endfor %}
+        <ul class="clean">
+          {% for s in suspects %}
+            <li class="item">
+              <strong>#{{ s.suspect_id }}</strong> — {{ s.gender or '?' }}/{{ s.race or '?' }}, {{ s.age_grp or '?' }},
+              Arrested: <strong>{{ 'Yes' if s.arrest_status else 'No' }}</strong>
+
+              <!-- compact arrest toggle -->
+              <form method="post" class="inline-form">
+                <input type="hidden" name="action" value="update_suspect_arrest">
+                <input type="hidden" name="suspect_id" value="{{ s.suspect_id }}">
+                <span class="label">Arrested?</span>
+                <select name="arrest_status" class="sm">
+                  <option value="Yes" {% if s.arrest_status %}selected{% endif %}>Yes</option>
+                  <option value="No"  {% if not s.arrest_status %}selected{% endif %}>No</option>
+                </select>
+                <button type="submit" class="sm">Save</button>
+              </form>
+            </li>
+          {% endfor %}
         </ul>
       {% else %}
-        <p>(none)</p>
+        <p class="help">(No suspects recorded)</p>
       {% endif %}
+
+      <div class="grid-2" style="margin-top:10px;">
+        <div>
+          <h4 style="margin:0 0 6px;">Add Suspect</h4>
+          <form method="post">
+            <input type="hidden" name="action" value="add_suspect">
+            <div class="row" style="margin-bottom:8px;">
+              <label class="label">Gender</label>
+              <select name="s_gender" class="sm">
+                <option value="">(select)</option>
+                <option>Female</option>
+                <option>Male</option>
+              </select>
+
+              <label class="label">Race</label>
+              <select name="s_race" class="sm" style="min-width:220px;">
+                <option value="">(optional)</option>
+                <option>BLACK</option>
+                <option>WHITE</option>
+                <option>WHITE HISPANIC</option>
+                <option>BLACK HISPANIC</option>
+                <option>ASIAN / PACIFIC ISLANDER</option>
+                <option>AMERICAN INDIAN/ALASKAN NATIVE</option>
+              </select>
+            </div>
+
+            <div class="row" style="margin-bottom:8px;">
+              <label class="label">Age Group</label>
+              <select name="s_age_grp" class="sm">
+                <option value="">(select)</option>
+                <option>&lt;18</option>
+                <option>18-24</option>
+                <option>25-44</option>
+                <option>45-64</option>
+                <option>65+</option>
+              </select>
+
+              <label class="label">Arrest</label>
+              <select name="s_arrest" class="sm">
+                <option value="No">No</option>
+                <option value="Yes">Yes</option>
+              </select>
+            </div>
+
+            <button type="submit" class="sm">Add Suspect</button>
+          </form>
+        </div>
+      </div>
     </div>
 
     <!-- Victims -->
-    <div class="section">
+    <div class="card">
       <h3>Victims</h3>
       {% if victims %}
-        <ul>
-        {% for v in victims %}
-          <li>#{{ v.victim_id }} — {{ v.gender or '?' }}/{{ v.race or '?' }},
-              {{ v.age_grp or '?' }}, Injury: {{ v.injury_severity or 'Unknown' }}</li>
-        {% endfor %}
+        <ul class="clean">
+          {% for v in victims %}
+            <li class="item">
+              <strong>#{{ v.victim_id }}</strong> — {{ v.gender or '?' }}/{{ v.race or '?' }},
+              {{ v.age_grp or '?' }}, Injury: {{ v.injury_severity or 'Unknown' }}
+            </li>
+          {% endfor %}
         </ul>
       {% else %}
-        <p>(none)</p>
+        <p class="help">(No victims recorded)</p>
       {% endif %}
-    </div>
 
-    <p class="section"><a href="{{ url_for('admin_index') }}">← Back to admin list</a></p>
+      <div class="grid-2" style="margin-top:10px;">
+        <div>
+          <h4 style="margin:0 0 6px;">Add Victim</h4>
+          <form method="post">
+            <input type="hidden" name="action" value="add_victim">
+            <div class="row" style="margin-bottom:8px;">
+              <label class="label">Gender</label>
+              <select name="v_gender" class="sm">
+                <option value="">(select)</option>
+                <option>Female</option>
+                <option>Male</option>
+              </select>
+
+              <label class="label">Race</label>
+              <select name="v_race" class="sm" style="min-width:220px;">
+                <option value="">(optional)</option>
+                <option>BLACK</option>
+                <option>WHITE</option>
+                <option>WHITE HISPANIC</option>
+                <option>BLACK HISPANIC</option>
+                <option>ASIAN / PACIFIC ISLANDER</option>
+                <option>AMERICAN INDIAN/ALASKAN NATIVE</option>
+              </select>
+            </div>
+
+            <div class="row" style="margin-bottom:8px;">
+              <label class="label">Age Group</label>
+              <select name="v_age_grp" class="sm">
+                <option value="">(select)</option>
+                <option>&lt;18</option>
+                <option>18-24</option>
+                <option>25-44</option>
+                <option>45-64</option>
+                <option>65+</option>
+              </select>
+
+              <label class="label">Injury Severity</label>
+              <select name="v_injury" class="sm">
+                <option>None</option>
+                <option>Minor</option>
+                <option>Severe</option>
+                <option>Fatal</option>
+              </select>
+            </div>
+
+            <button type="submit" class="sm">Add Victim</button>
+          </form>
+        </div>
+      </div>
+    </div>
   </body>
 </html>
