@@ -940,9 +940,9 @@ def incidents_analysis():
         custom_rows=custom_rows, custom_columns=custom_columns, custom_postal_code=custom_postal_code, custom_gender=custom_gender, custom_age_group=custom_age_group, custom_ethnicity=custom_ethnicity
     )
 
-@app.route('/another')
+@app.route('/recommendations')
 def another():
-	return render_template("another.html")
+	return render_template("personalized_rec.html")
 
 
 # Example of adding new data to the database
