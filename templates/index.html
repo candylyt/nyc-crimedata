@@ -130,6 +130,11 @@
     button {
       padding: 6px 10px;
     }
+    .nav-bar{
+      display: flex;
+      flex-direction: row;
+      column-gap: 50px;
+    }
   </style>
 
   <body>
@@ -142,7 +147,11 @@
       </div>
     </div>
 
-    <p><a href="incidents/analysis">Incident Analysis</a></p>
+    <p class="nav-bar">
+      <a href="incidents/analysis">Incident Analysis</a>
+      <a href="/recommendations">Personalized Recommendations</a>
+    </p>
+    
 
     <!-- FILTER FORM (method=GET) -->
     <form class="filters" method="get" action="{{ url_for('index') }}">
