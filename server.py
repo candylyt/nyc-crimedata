@@ -560,6 +560,105 @@ def admin_system():
     )
 
 ######################################### above is admin functions ######################################################
+@app.route("/recommendations", methods=["GET"])
+def recommendations():
+    # --- Top 10 safest (postal_code, borough) pairs ---
+    top10_sql = """
+            WITH agg AS (
+              SELECT
+                a.postal_code::text AS postal_code,
+                a.borough           AS borough,
+                COUNT(*)            AS incidents,
+                SUM(
+                  CASE ct.severity
+                    WHEN 'low'    THEN 1
+                    WHEN 'medium' THEN 3
+                    WHEN 'high'   THEN 5
+                    ELSE 0
+                  END
+                ) AS severity_points
+              FROM incident i
+              JOIN address a        ON a.address_id = i.address_id
+              JOIN classified_as ca ON ca.incident_id = i.incident_id
+              JOIN crimetype ct     ON ct.crime_type_id = ca.crime_type_id
+              WHERE a.postal_code IS NOT NULL
+                AND a.borough     IS NOT NULL
+                AND a.postal_code::text <> ''
+                AND a.borough <> ''
+                AND a.postal_code::text ~ '^\d{5}$'
+              GROUP BY a.postal_code, a.borough
+            )
+            SELECT
+              postal_code,
+              borough,
+              incidents,
+              severity_points,
+              (incidents + severity_points) AS risk_score
+            FROM agg
+            ORDER BY risk_score ASC, incidents ASC, postal_code ASC
+            LIMIT 10;
+
+    """
+    top_rows = g.conn.execute(text(top10_sql)).mappings().all()
+
+    # --- Single ZIP risk check ---
+    postal_code = (request.args.get("postal_code") or "").strip()
+    user_result = None
+    if postal_code:
+        zip_sql = """
+        WITH agg AS (
+            SELECT
+                a.postal_code::text AS postal_code,
+                a.borough           AS borough,
+                COUNT(*)            AS incidents,
+                SUM(
+                    CASE ct.severity
+                        WHEN 'low'    THEN 1
+                        WHEN 'medium' THEN 3
+                        WHEN 'high'   THEN 5
+                        ELSE 0
+                    END
+                ) AS severity_points
+            FROM incident i
+            JOIN address a        ON a.address_id = i.address_id
+            JOIN classified_as ca ON ca.incident_id = i.incident_id
+            JOIN crimetype ct     ON ct.crime_type_id = ca.crime_type_id
+            WHERE a.postal_code = :zip
+              AND a.postal_code <> ''        -- optional: avoid blank zips
+              AND a.borough IS NOT NULL
+              AND a.borough <> ''
+            GROUP BY a.postal_code, a.borough   -- <<< this was missing
+        )
+        SELECT
+            postal_code,
+            borough,
+            incidents,
+            severity_points,
+            (incidents + severity_points) AS risk_score
+        FROM agg;
+        """
+
+        row = g.conn.execute(text(zip_sql), {"zip": postal_code}).mappings().first()
+        if row:
+            score = row["risk_score"]
+            risk_level = "Low" if score <= 10 else ("Moderate" if score <= 25 else "High")
+            user_result = {
+                "postal_code": row["postal_code"],
+                "borough": row["borough"],
+                "incidents": row["incidents"],
+                "severity_points": row["severity_points"],
+                "risk_score": score,
+                "risk_level": risk_level,
+            }
+
+    return render_template(
+        "recommendations.html",
+        top_rows=top_rows,
+        postal_code=postal_code,
+        user_result=user_result,
+    )
+
+######################################### above is personalized recommendation functions ######################################################
 @app.route('/incident/<int:incident_id>', methods=['GET'])
 def user_incident_detail(incident_id):
     incident = g.conn.execute(text("""
