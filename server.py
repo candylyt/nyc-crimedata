@@ -718,51 +718,67 @@ def recommendations():
     # ------------------------------------------------------------
     user_result = None
     risk_bucket = None
-
+    # --- Section B: risk for a specific postal code (postal+borough-consistent) ---
     if postal:
-        row = g.conn.execute(
-            text("""
-            WITH tot AS (
-              SELECT
-                a.postal_code::text AS postal_code,
-                a.borough           AS borough,
-                COUNT(DISTINCT i.incident_id) AS total_incidents
-              FROM incident i
-              JOIN address a ON a.address_id = i.address_id
-              WHERE a.postal_code::text = :zip
-              GROUP BY a.postal_code, a.borough
-            ),
-            demo AS (
-              SELECT
-                COUNT(DISTINCT i.incident_id) AS demo_incidents
-              FROM incident i
-              JOIN address a ON a.address_id = i.address_id
-              WHERE a.postal_code::text = :zip
-                AND (
+        zip_sql = """
+        -- Find a concrete borough for this ZIP (prefer any non-null value).
+        WITH zz AS (
+          SELECT a.borough
+          FROM address a
+          JOIN incident i ON i.address_id = a.address_id
+          WHERE a.postal_code::text = :zip
+            AND a.borough IS NOT NULL AND a.borough <> ''
+          GROUP BY a.borough
+          ORDER BY COUNT(DISTINCT i.incident_id) DESC
+          LIMIT 1
+        ),
+
+
+        -- Totals per that (zip, borough)
+        tot AS (
+          SELECT COUNT(DISTINCT i.incident_id) AS total_incidents
+          FROM incident i
+          JOIN address a ON a.address_id = i.address_id
+          WHERE a.postal_code::text = :zip
+            AND a.borough = (SELECT borough FROM zz)
+        ),
+
+        -- “Matching” incidents for the same (zip, borough)
+        demo AS (
+          SELECT COUNT(DISTINCT i.incident_id) AS demo_incidents
+          FROM incident i
+          JOIN address a ON a.address_id = i.address_id
+          WHERE a.postal_code::text = :zip
+            AND a.borough = (SELECT borough FROM zz)
+            AND (
                   (:gender = '' AND :age_grp = '' AND :race = '')
-                  OR EXISTS (
-                      SELECT 1
-                      FROM victim v
-                      WHERE v.incident_id = i.incident_id
-                        AND (:gender  = '' OR v.gender = :gender)
-                        AND (:age_grp = '' OR v.age_grp = :age_grp)
-                        AND (:race    = '' OR v.race   = :race)
-                  )
-                )
+               OR EXISTS (
+                    SELECT 1
+                    FROM victim v
+                    WHERE v.incident_id = i.incident_id
+                      AND (:gender  = '' OR v.gender = :gender)
+                      AND (:age_grp = '' OR v.age_grp = :age_grp)
+                      AND (:race    = '' OR v.race   = :race)
+               )
             )
-            SELECT
-              t.postal_code,
-              t.borough,
-              t.total_incidents,
-              COALESCE(d.demo_incidents,0) AS demo_incidents,
-              CASE WHEN t.total_incidents = 0
-                   THEN 0.0
-                   ELSE ROUND(100.0 * COALESCE(d.demo_incidents,0) / t.total_incidents, 2)
-              END AS demo_pct
-            FROM tot t
-            CROSS JOIN demo d
-            """),
-            {"zip": postal, **params},
+        )
+
+        SELECT
+          CAST(:zip AS text)                     AS postal_code,
+          (SELECT borough FROM zz)               AS borough,
+          (SELECT total_incidents FROM tot)      AS total_incidents,
+          (SELECT demo_incidents  FROM demo)     AS demo_incidents,
+          CASE
+            WHEN (SELECT total_incidents FROM tot) = 0 THEN 0.0
+            ELSE ROUND(
+              100.0 * (SELECT demo_incidents FROM demo)
+                    / NULLIF((SELECT total_incidents FROM tot), 0), 2)
+          END AS demo_pct;
+
+        """
+        row = g.conn.execute(
+            text(zip_sql),
+            {"zip": postal, "gender": gender, "age_grp": age_grp, "race": race},
         ).mappings().first()
 
         if row:
