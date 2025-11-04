@@ -149,7 +149,8 @@
 
     <p class="nav-bar">
       <a href="incidents/analysis">Incident Analysis</a>
-      <a href="/recommendations">Personalized Recommendations</a>
+        <a href="{{ url_for('recommendations') }}">Personalized Recommendations</a>
+
     </p>
     
 
@@ -242,16 +243,27 @@
         </select>
       </div>
 
-      <div>
-          <label>Victim's Ethnicity</label>
-          {% set selected_ethnicity = request.args.get('victim_ethnicity', '') %}
-          <select name="custom_ethnicity">
-            <option value="">(All Ethnicities)</option>
-            {% for ethnicity in ["BLACK", "WHITE", "WHITE HISPANIC", "BLACK HISPANIC", "ASIAN / PACIFIC ISLANDER", "AMERICAN INDIAN/ALASKAN NATIVE"] %}
-            <option value="{{ ethnicity }}" {% if selected_ethnicity == ethnicity %}selected{% endif %}>{{ ethnicity }}</option>
-          {% endfor %}
-          </select>
-        </div>
+    <div>
+      <label>Victim's Ethnicity</label>
+      {% set selected_ethnicity = request.args.get('victim_ethnicity', '') %}
+      <select name="victim_ethnicity">
+        <option value="">(All Ethnicities)</option>
+        {% for ethnicity in [
+          "BLACK",
+          "WHITE",
+          "WHITE HISPANIC",
+          "BLACK HISPANIC",
+          "ASIAN / PACIFIC ISLANDER",
+          "AMERICAN INDIAN/ALASKAN NATIVE"
+        ] %}
+          <option value="{{ ethnicity }}"
+                  {% if selected_ethnicity == ethnicity %}selected{% endif %}>
+            {{ ethnicity }}
+          </option>
+        {% endfor %}
+      </select>
+    </div>
+
 
       <div class="actions">
         <button type="submit">Apply Filters</button>
@@ -263,20 +275,25 @@
       <thead>
         <tr>
           {% for col in columns %}
-          <th>{{ col }}</th>
+            <th>{{ col }}</th>
           {% endfor %}
         </tr>
       </thead>
       <tbody>
         {% for row in rows %}
-        <tr>
-          {% for cell in row %}
-          <td>{{ cell }}</td>
-          {% endfor %}
-        </tr>
+          <tr>
+            {# show all data cells except the last one (which is the id) #}
+            {% for cell in row[:-1] %}
+              <td>{{ cell }}</td>
+            {% endfor %}
+            <td>
+              <a href="{{ url_for('user_incident_detail', incident_id=row[-1]) }}">View details</a>
+            </td>
+          </tr>
         {% endfor %}
       </tbody>
     </table>
+
 
     <div class="pagination">
       {% if page > 1 %}

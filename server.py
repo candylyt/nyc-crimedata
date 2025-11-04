@@ -10,14 +10,10 @@ Read about it online.
 """
 import os
 from pydoc import text
-# accessible as a variable in index.html:
 from sqlalchemy import *
-from datetime import date
-from sqlalchemy.pool import NullPool
 from flask import Flask, request, render_template, g, redirect, Response, abort, url_for, abort, flash
 from datetime import date, timedelta
 from math import ceil
-import re
 
 tmpl_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'templates')
 app = Flask(__name__, template_folder=tmpl_dir)
@@ -69,17 +65,23 @@ def admin_index():
     page = max(int(request.args.get("page", 1)), 1)
     incidents_per_page = 20
 
-    lawcategory = request.args.get("lawcategory")
-    status = request.args.get("status")
-    borough = request.args.getlist("borough")
-    severity = request.args.get("severity")
-    crime_type = request.args.get("crime_type")
-    postal_code = request.args.get("postal_code")
-    date_start = request.args.get("date_start")
-    date_end = request.args.get("date_end")
+    # regular filters
+    lawcategory     = request.args.get("lawcategory")
+    status          = request.args.get("status")
+    borough         = request.args.getlist("borough")
+    severity        = request.args.get("severity")
+    crime_type      = request.args.get("crime_type")
+    postal_code     = request.args.get("postal_code")
+    date_start      = request.args.get("date_start")
+    date_end        = request.args.get("date_end")
+
+    # NEW: victim filters
+    victim_gender    = request.args.get("victim_gender")
+    victim_age_grp   = request.args.get("victim_age_grp")
+    victim_ethnicity = request.args.get("victim_ethnicity")
 
     filters = []
-    params = {}
+    params  = {}
 
     if lawcategory:
         filters.append("lc.category = :lawcategory")
@@ -99,6 +101,7 @@ def admin_index():
 
     clean_crime_type = (crime_type or "").strip().lower()
     if clean_crime_type:
+        # escape % and _ on our side; use ESCAPE '\\'
         filters.append("ct.crime_type ILIKE :crime_type ESCAPE '\\\\'")
         params["crime_type"] = f"%{handle_wildcards_characters(clean_crime_type)}%"
 
@@ -114,26 +117,40 @@ def admin_index():
         filters.append("i.occurred_date <= :date_end")
         params["date_end"] = date_end
 
-    where_clause = ""
-    if filters:
-        where_clause = "WHERE " + " AND ".join(filters)
+    # ----- Victim EXISTS subfilter (prevents duplicate incidents) -----
+    victim_clauses = []
+    if victim_gender:
+        victim_clauses.append("v.gender = :v_gender")
+        params["v_gender"] = victim_gender
+    if victim_age_grp:
+        victim_clauses.append("v.age_grp = :v_age_grp")
+        params["v_age_grp"] = victim_age_grp
+    if victim_ethnicity:
+        victim_clauses.append("v.race = :v_ethnicity")
+        params["v_ethnicity"] = victim_ethnicity
 
-    # count
+    if victim_clauses:
+        victim_sql = "EXISTS (SELECT 1 FROM victim v WHERE v.incident_id = i.incident_id AND " + " AND ".join(victim_clauses) + ")"
+        filters.append(victim_sql)
+
+    where_clause = "WHERE " + " AND ".join(filters) if filters else ""
+
+    # ---------- COUNT ----------
     count_query = f"""
         SELECT COUNT(*) AS total
         FROM incident i
-            JOIN address a ON i.address_id = a.address_id
-            JOIN jurisdiction j ON i.jur_id = j.jur_id
-            JOIN classified_as ca ON i.incident_id = ca.incident_id
-            JOIN crimetype ct ON ca.crime_type_id = ct.crime_type_id
-            JOIN lawcategory lc ON lc.law_cat_id = ct.law_cat_id
+        JOIN address a        ON i.address_id = a.address_id
+        JOIN jurisdiction j   ON i.jur_id = j.jur_id
+        JOIN classified_as ca ON i.incident_id = ca.incident_id
+        JOIN crimetype ct     ON ca.crime_type_id = ct.crime_type_id
+        JOIN lawcategory lc   ON lc.law_cat_id = ct.law_cat_id
         {where_clause}
     """
     total_incidents = g.conn.execute(text(count_query), params).scalar_one()
     total_pages = max(ceil(total_incidents / incidents_per_page), 1)
     offset = (page - 1) * incidents_per_page
 
-    # data (NOTE: incident_id first!)
+    # ---------- DATA ----------
     data_query = f"""
         SELECT
             i.incident_id,
@@ -146,11 +163,11 @@ def admin_index():
             a.borough,
             a.postal_code
         FROM incident i
-            JOIN address a ON i.address_id = a.address_id
-            JOIN jurisdiction j ON i.jur_id = j.jur_id
-            JOIN classified_as ca ON i.incident_id = ca.incident_id
-            JOIN crimetype ct ON ca.crime_type_id = ct.crime_type_id
-            JOIN lawcategory lc ON lc.law_cat_id = ct.law_cat_id
+        JOIN address a        ON i.address_id = a.address_id
+        JOIN jurisdiction j   ON i.jur_id = j.jur_id
+        JOIN classified_as ca ON i.incident_id = ca.incident_id
+        JOIN crimetype ct     ON ca.crime_type_id = ct.crime_type_id
+        JOIN lawcategory lc   ON lc.law_cat_id = ct.law_cat_id
         {where_clause}
         ORDER BY i.occurred_date DESC
         LIMIT :limit OFFSET :offset;
@@ -160,7 +177,6 @@ def admin_index():
         {**params, "limit": incidents_per_page, "offset": offset},
     )
     rows = cursor.fetchall()
-    # we don't want to show the id in the header
     columns = [
         "occurred_date",
         "crime_type",
@@ -173,8 +189,8 @@ def admin_index():
     ]
     cursor.close()
 
-    # pagination urls for /admin
-    def make_url_admin(page_num):
+    # pagination url builder for /admin
+    def make_url_admin(page_num: int):
         base_args = request.args.to_dict(flat=False)
         base_args["page"] = [str(page_num)]
         args_flat = {}
@@ -185,7 +201,6 @@ def admin_index():
                 args_flat[k] = v[0] if v else ""
         return url_for("admin_index", **args_flat)
 
-    # windowed page numbers like your index()
     window = 3
     start = max(page - window, 1)
     end = min(page + window, total_pages)
@@ -202,6 +217,7 @@ def admin_index():
         page_numbers=page_numbers,
         make_url=make_url_admin,
     )
+
 @app.route('/admin/<int:incident_id>', methods=['GET', 'POST'])
 def admin_incident_detail(incident_id):
     # Incident core
@@ -544,6 +560,146 @@ def admin_system():
     )
 
 ######################################### above is admin functions ######################################################
+@app.route("/recommendations", methods=["GET"])
+def recommendations():
+    # --- Top 10 safest (postal_code, borough) pairs ---
+    top10_sql = """
+            WITH agg AS (
+              SELECT
+                a.postal_code::text AS postal_code,
+                a.borough           AS borough,
+                COUNT(*)            AS incidents,
+                SUM(
+                  CASE ct.severity
+                    WHEN 'low'    THEN 1
+                    WHEN 'medium' THEN 3
+                    WHEN 'high'   THEN 5
+                    ELSE 0
+                  END
+                ) AS severity_points
+              FROM incident i
+              JOIN address a        ON a.address_id = i.address_id
+              JOIN classified_as ca ON ca.incident_id = i.incident_id
+              JOIN crimetype ct     ON ct.crime_type_id = ca.crime_type_id
+              WHERE a.postal_code IS NOT NULL
+                AND a.borough     IS NOT NULL
+                AND a.postal_code::text <> ''
+                AND a.borough <> ''
+                AND a.postal_code::text ~ '^\d{5}$'
+              GROUP BY a.postal_code, a.borough
+            )
+            SELECT
+              postal_code,
+              borough,
+              incidents,
+              severity_points,
+              (incidents + severity_points) AS risk_score
+            FROM agg
+            ORDER BY risk_score ASC, incidents ASC, postal_code ASC
+            LIMIT 10;
+
+    """
+    top_rows = g.conn.execute(text(top10_sql)).mappings().all()
+
+    # --- Single ZIP risk check ---
+    postal_code = (request.args.get("postal_code") or "").strip()
+    user_result = None
+    if postal_code:
+        zip_sql = """
+        WITH agg AS (
+            SELECT
+                a.postal_code::text AS postal_code,
+                a.borough           AS borough,
+                COUNT(*)            AS incidents,
+                SUM(
+                    CASE ct.severity
+                        WHEN 'low'    THEN 1
+                        WHEN 'medium' THEN 3
+                        WHEN 'high'   THEN 5
+                        ELSE 0
+                    END
+                ) AS severity_points
+            FROM incident i
+            JOIN address a        ON a.address_id = i.address_id
+            JOIN classified_as ca ON ca.incident_id = i.incident_id
+            JOIN crimetype ct     ON ct.crime_type_id = ca.crime_type_id
+            WHERE a.postal_code = :zip
+              AND a.postal_code <> ''        -- optional: avoid blank zips
+              AND a.borough IS NOT NULL
+              AND a.borough <> ''
+            GROUP BY a.postal_code, a.borough   -- <<< this was missing
+        )
+        SELECT
+            postal_code,
+            borough,
+            incidents,
+            severity_points,
+            (incidents + severity_points) AS risk_score
+        FROM agg;
+        """
+
+        row = g.conn.execute(text(zip_sql), {"zip": postal_code}).mappings().first()
+        if row:
+            score = row["risk_score"]
+            risk_level = "Low" if score <= 10 else ("Moderate" if score <= 25 else "High")
+            user_result = {
+                "postal_code": row["postal_code"],
+                "borough": row["borough"],
+                "incidents": row["incidents"],
+                "severity_points": row["severity_points"],
+                "risk_score": score,
+                "risk_level": risk_level,
+            }
+
+    return render_template(
+        "recommendations.html",
+        top_rows=top_rows,
+        postal_code=postal_code,
+        user_result=user_result,
+    )
+
+######################################### above is personalized recommendation functions ######################################################
+@app.route('/incident/<int:incident_id>', methods=['GET'])
+def user_incident_detail(incident_id):
+    incident = g.conn.execute(text("""
+        SELECT
+            i.incident_id,
+            i.occurred_date,
+            i.status,
+            i.incident_details AS description,
+            ct.crime_type,
+            lc.category,
+            ct.severity,
+            j.description AS jurisdiction,
+            a.borough,
+            a.postal_code
+        FROM incident i
+        JOIN address a        ON i.address_id = a.address_id
+        JOIN jurisdiction j   ON i.jur_id = j.jur_id
+        JOIN classified_as ca ON i.incident_id = ca.incident_id
+        JOIN crimetype ct     ON ca.crime_type_id = ct.crime_type_id
+        JOIN lawcategory lc   ON lc.law_cat_id = ct.law_cat_id
+        WHERE i.incident_id = :incident_id
+    """), {"incident_id": incident_id}).mappings().first()
+    if not incident:
+        abort(404)
+
+    suspects = g.conn.execute(text("""
+        SELECT suspect_id, gender, race, age_grp, arrest_status
+        FROM suspect
+        WHERE incident_id = :incident_id
+        ORDER BY suspect_id
+    """), {"incident_id": incident_id}).mappings().all()
+
+    victims = g.conn.execute(text("""
+        SELECT victim_id, gender, race, injury_severity, age_grp
+        FROM victim
+        WHERE incident_id = :incident_id
+        ORDER BY victim_id
+    """), {"incident_id": incident_id}).mappings().all()
+
+    return render_template("user_detail.html",
+                           incident=incident, suspects=suspects, victims=victims)
 
 # helper functions
 def build_base_args():
@@ -616,197 +772,148 @@ def teardown_request(exception):
 @app.route('/')
 @app.route('/incidents')
 def index():
-	"""
-	request is a special object that Flask provides to access web request information:
+    """
+    General-user incidents list with filters + 'View details' action.
+    """
+    # --- query parameters ---
+    page = max(int(request.args.get("page", 1)), 1)
+    incidents_per_page = 20
 
-	request.method:   "GET" or "POST"
-	request.form:     if the browser submitted a form, this contains the data in the form
-	request.args:     dictionary of URL arguments, e.g., {a:1, b:2} for http://localhost?a=1&b=2
+    lawcategory      = request.args.get("lawcategory")
+    status           = request.args.get("status")
+    borough          = request.args.getlist("borough")
+    severity         = request.args.get("severity")
+    crime_type       = request.args.get("crime_type")
+    postal_code      = request.args.get("postal_code")
+    date_start       = request.args.get("date_start")
+    date_end         = request.args.get("date_end")
+    victim_gender    = request.args.get("victim_gender")
+    victim_age_grp   = request.args.get("victim_age_grp")
+    victim_ethnicity = request.args.get("victim_ethnicity")
 
-	See its API: https://flask.palletsprojects.com/en/1.1.x/api/#incoming-request-data
-	"""
+    filters     = []
+    parameters  = {}
 
-	# query parameters
-	page = max(int(request.args.get("page", 1)), 1)
-	incidents_per_page = 20
-	lawcategory = request.args.get("lawcategory")
-	status = request.args.get("status")
-	borough = request.args.getlist("borough")
-	severity = request.args.get("severity")
-	crime_type = request.args.get("crime_type")
-	postal_code = request.args.get("postal_code")
-	date_start = request.args.get("date_start")
-	date_end = request.args.get("date_end")
-	victim_gender = request.args.get("victim_gender")
-	victim_age_grp = request.args.get("victim_age_grp")
-	victim_ethnicity = request.args.get("victim_ethnicity")
+    if lawcategory:
+        filters.append("lc.category = :lawcategory")
+        parameters["lawcategory"] = lawcategory
 
-	filters = []
-	parameters = {}
+    if status:
+        filters.append("i.status = :status")
+        parameters["status"] = status
 
-	if lawcategory:
-		filters.append("lc.category = :lawcategory")
-		parameters["lawcategory"] = lawcategory
-	
-	if status:
-		filters.append("i.status = :status")
-		parameters["status"] = status
-	
-	if borough:
-		filters.append("a.borough = ANY(:borough)")
-		parameters["borough"] = borough
-	
-	if severity: 
-		filters.append("ct.severity = :severity")
-		parameters["severity"] = severity
+    if borough:
+        filters.append("a.borough = ANY(:borough)")
+        parameters["borough"] = borough
 
-	clean_crime_type = (crime_type or "").strip().lower()
-	if clean_crime_type:
-		filters.append("ct.crime_type ILIKE :crime_type ESCAPE '\\'")
-		parameters["crime_type"] = f"%{handle_wildcards_characters(clean_crime_type)}%"
-	
-	if postal_code:
-		filters.append("a.postal_code = :postal_code")
-		parameters["postal_code"] = postal_code
-	
-	if date_start:
-		filters.append("i.occurred_date >= :date_start")
-		parameters["date_start"] = date_start
+    if severity:
+        filters.append("ct.severity = :severity")
+        parameters["severity"] = severity
 
-	if date_end:
-		filters.append("i.occurred_date <= :date_end")
-		parameters["date_end"] = date_end
+    clean_crime_type = (crime_type or "").strip().lower()
+    if clean_crime_type:
+        filters.append("ct.crime_type ILIKE :crime_type ESCAPE '\\\\'")
+        parameters["crime_type"] = f"%{handle_wildcards_characters(clean_crime_type)}%"
 
-	if victim_gender:
-		filters.append("v.gender = :victim_gender")
-		parameters["victim_gender"] = victim_gender
+    if postal_code:
+        filters.append("a.postal_code = :postal_code")
+        parameters["postal_code"] = postal_code
 
-	if victim_age_grp:
-		filters.append("v.age_grp = :victim_age_grp")
-		parameters["victim_age_grp"] = victim_age_grp
+    if date_start:
+        filters.append("i.occurred_date >= :date_start")
+        parameters["date_start"] = date_start
 
-	if victim_ethnicity:
-		filters.append("v.race = :victim_ethnicity")
-		parameters["victim_ethnicity"] = victim_ethnicity
+    if date_end:
+        filters.append("i.occurred_date <= :date_end")
+        parameters["date_end"] = date_end
 
-	# DEBUG: this is debugging code to see what request looks like
-	print(request.args)
+    # victim filters
+    if victim_gender:
+        filters.append("v.gender = :victim_gender")
+        parameters["victim_gender"] = victim_gender
 
-	where_clause = ""
-	if filters:
-		where_clause = "WHERE " + " AND ".join(filters)
+    if victim_age_grp:
+        filters.append("v.age_grp = :victim_age_grp")
+        parameters["victim_age_grp"] = victim_age_grp
 
-	# count the total number of incidents
-	count_query = f"""
-	SELECT COUNT(*) As total
-	FROM incident i 
-		JOIN address a ON i.address_id = a.address_id 
-		JOIN jurisdiction j ON i.jur_id = j.jur_id
-		JOIN classified_as ca ON i.incident_id = ca.incident_id
-		JOIN crimetype ct ON ca.crime_type_id = ct.crime_type_id
-		JOIN lawcategory lc ON lc.law_cat_id = ct.law_cat_id
-        JOIN victim v ON v.incident_id = i.incident_id
-	{where_clause}
-	"""
+    if victim_ethnicity:
+        filters.append("v.race = :victim_ethnicity")
+        parameters["victim_ethnicity"] = victim_ethnicity
 
-	total_incidents = g.conn.execute(text(count_query), parameters).scalar_one()
-	total_pages = max(ceil(total_incidents/incidents_per_page), 1)
-	offset = (page - 1) * incidents_per_page
-	#
-	# example of a database query
-	#
-	data_query = f"""
-	SELECT i.occurred_date, ct.crime_type, lc.category, ct.severity, i.status, j.description AS jurisdiction, a.borough, a.postal_code
-	FROM incident i 
-		JOIN address a ON i.address_id = a.address_id 
-		JOIN jurisdiction j ON i.jur_id = j.jur_id
-		JOIN classified_as ca ON i.incident_id = ca.incident_id
-		JOIN crimetype ct ON ca.crime_type_id = ct.crime_type_id
-		JOIN lawcategory lc ON lc.law_cat_id = ct.law_cat_id
-        JOIN victim v ON v.incident_id = i.incident_id
-	{where_clause}
-	ORDER BY i.occurred_date DESC
-	LIMIT :limit OFFSET :offset;
-	"""
-	cursor = g.conn.execute(text(data_query), {**parameters, "limit": incidents_per_page, "offset": offset})
+    # build WHERE
+    where_clause = ""
+    if filters:
+        where_clause = "WHERE " + " AND ".join(filters)
 
-	rows = cursor.fetchall()
-	columns = cursor.keys()
-	# incidents = []
-	# for result in cursor:
-	# 	incidents.append(result[0])
-	cursor.close()
+    # --- counts for pagination ---
+    count_query = f"""
+        SELECT COUNT(*) AS total
+        FROM incident i
+        JOIN address a        ON i.address_id = a.address_id
+        JOIN jurisdiction j   ON i.jur_id = j.jur_id
+        JOIN classified_as ca ON i.incident_id = ca.incident_id
+        JOIN crimetype ct     ON ca.crime_type_id = ct.crime_type_id
+        JOIN lawcategory lc   ON lc.law_cat_id = ct.law_cat_id
+        LEFT JOIN victim v    ON v.incident_id = i.incident_id
+        {where_clause}
+    """
+    total_incidents = g.conn.execute(text(count_query), parameters).scalar_one()
+    total_pages = max(ceil(total_incidents / incidents_per_page), 1)
+    offset = (page - 1) * incidents_per_page
 
-	base_args = {}
-	base_args["incidents_per_page"] = incidents_per_page
+    # --- data query (incident_id LAST) ---
+    data_query = f"""
+        SELECT
+            i.occurred_date,
+            ct.crime_type,
+            lc.category,
+            ct.severity,
+            i.status,
+            j.description AS jurisdiction,
+            a.borough,
+            a.postal_code,
+            i.incident_id
+        FROM incident i
+        JOIN address a        ON i.address_id = a.address_id
+        JOIN jurisdiction j   ON i.jur_id = j.jur_id
+        JOIN classified_as ca ON i.incident_id = ca.incident_id
+        JOIN crimetype ct     ON ca.crime_type_id = ct.crime_type_id
+        JOIN lawcategory lc   ON lc.law_cat_id = ct.law_cat_id
+        LEFT JOIN victim v    ON v.incident_id = i.incident_id
+        {where_clause}
+        ORDER BY i.occurred_date DESC
+        LIMIT :limit OFFSET :offset
+    """
+    cursor = g.conn.execute(
+        text(data_query),
+        {**parameters, "limit": incidents_per_page, "offset": offset},
+    )
+    rows = cursor.fetchall()
 
-	if lawcategory:
-		base_args["lawcategory"] = lawcategory
-	if status:
-		base_args["status"] = status
-	if borough:
-		base_args["borough"] = borough
-	if severity:
-		base_args["severity"] = severity
-	if crime_type:
-		base_args["crime_type"] = crime_type
-	if victim_gender:
-		base_args["victim_gender"] = victim_gender
-	if victim_age_grp:
-		base_args["victim_age_grp"] = victim_age_grp    
-	if victim_ethnicity:
-		base_args["victim_ethnicity"] = victim_ethnicity    
+    # mutate header so the last column shows as "Action"
+    columns = list(cursor.keys())
+    if columns and str(columns[-1]).lower() == "incident_id":
+        columns[-1] = "Action"
 
-	window = 3
-	start = max(page - window, 1)
-	end = min(page + window, total_pages)
-	page_numbers = list(range(start, end + 1))
+    cursor.close()
 
-	#
-	# Flask uses Jinja templates, which is an extension to HTML where you can
-	# pass data to a template and dynamically generate HTML based on the data
-	# (you can think of it as simple PHP)
-	# documentation: https://realpython.com/primer-on-jinja-templating/
-	#
-	# You can see an example template in templates/index.html
-	#
-	# context are the variables that are passed to the template.
-	# for example, "data" key in the context variable defined below will be 
-	# accessible as a variable in index.html:
-	#
-	#     # will print: [u'grace hopper', u'alan turing', u'ada lovelace']
-	#     <div>{{data}}</div>
-	#     
-	#     # creates a <div> tag for each element in data
-	#     # will print: 
-	#     #
-	#     #   <div>grace hopper</div>
-	#     #   <div>alan turing</div>
-	#     #   <div>ada lovelace</div>
-	#     #
-	#     {% for n in data %}
-	#     <div>{{n}}</div>
-	#     {% endfor %}
-	#
-	# context = dict(data = incidents)
+    # pagination window
+    window = 3
+    start = max(page - window, 1)
+    end = min(page + window, total_pages)
+    page_numbers = list(range(start, end + 1))
 
-
-	#
-	# render_template looks in the templates/ folder for files.
-	# for example, the below file reads template/index.html
-	#
-	# return render_template("index.html", **context)
-	return render_template(
-		"index.html", 
-		rows=rows, 
-		columns=columns, 
-		page=page,
-		per_page=incidents_per_page,
-		total=total_incidents,
-		total_pages=total_pages,
-		page_numbers=page_numbers,
-		make_url=make_url_page,
-	)
+    return render_template(
+        "index.html",
+        rows=rows,
+        columns=columns,
+        page=page,
+        per_page=incidents_per_page,
+        total=total_incidents,
+        total_pages=total_pages,
+        page_numbers=page_numbers,
+        make_url=make_url_page,
+    )
 
 #
 # This is an example of a different path.  You can see it at:
