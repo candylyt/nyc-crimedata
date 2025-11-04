@@ -770,7 +770,7 @@ def teardown_request(exception):
 # see for decorators: http://simeonfranklin.com/blog/2012/jul/1/python-decorators-in-12-steps/
 #
 @app.route('/')
-@app.route('/incidents')
+@app.route('/incidents', methods=['GET'])
 def index():
     """
     General-user incidents list with filters + 'View details' action.
@@ -812,7 +812,7 @@ def index():
 
     clean_crime_type = (crime_type or "").strip().lower()
     if clean_crime_type:
-        filters.append("ct.crime_type ILIKE :crime_type ESCAPE '\\\\'")
+        filters.append("ct.crime_type ILIKE :crime_type ESCAPE '\\'")
         parameters["crime_type"] = f"%{handle_wildcards_characters(clean_crime_type)}%"
 
     if postal_code:
@@ -924,7 +924,7 @@ def index():
 # The functions for each app.route need to have different names
 #
 
-@app.route('/incidents/analysis')
+@app.route('/incidents/analysis', methods=['GET'])
 def incidents_analysis():
 
 	# section 1: top 10 crime types in nyc
@@ -961,14 +961,16 @@ def incidents_analysis():
 	WITH counts AS (
 	SELECT
 		ct.crime_type_id,
+        lc.category,
 		ct.crime_type,
 		COUNT(*) AS incident_count
 	FROM classified_as ca
 	JOIN crimetype ct ON ct.crime_type_id = ca.crime_type_id
-	JOIN incident i  ON i.incident_id = ca.incident_id
-	JOIN address a  ON a.address_id = i.address_id
+	JOIN incident i ON i.incident_id = ca.incident_id
+	JOIN address a ON a.address_id = i.address_id
+    JOIN lawcategory lc ON lc.law_cat_id = ct.law_cat_id
 	{where_clause}
-	GROUP BY ct.crime_type_id, ct.crime_type
+	GROUP BY ct.crime_type_id, ct.crime_type, lc.category
 	),
 	ranked AS (
 	SELECT
@@ -976,7 +978,7 @@ def incidents_analysis():
 		DENSE_RANK() OVER (ORDER BY c.incident_count DESC) AS rnk
 	FROM counts c
 	)
-	SELECT crime_type, incident_count
+	SELECT category as law_category, crime_type, incident_count
 	FROM ranked
 	WHERE rnk <= 10
 	ORDER BY incident_count DESC, crime_type;
@@ -1023,6 +1025,7 @@ def incidents_analysis():
     # query 2: customized filters
 	custom_sql = f"""
     SELECT 
+        lc.category as law_category,
         ct.crime_type,
         COUNT(*) AS num_incidents
     FROM incident i
@@ -1030,8 +1033,9 @@ def incidents_analysis():
         JOIN address a ON i.address_id = a.address_id
         JOIN classified_as ca ON ca.incident_id = i.incident_id
         JOIN crimetype ct ON ct.crime_type_id = ca.crime_type_id
+        JOIN lawcategory lc ON lc.law_cat_id = ct.law_cat_id
     {custom_where_clause}
-    GROUP BY ct.crime_type_id
+    GROUP BY ct.crime_type_id, lc.category, ct.crime_type
     ORDER BY num_incidents DESC;
     """
 
@@ -1041,16 +1045,75 @@ def incidents_analysis():
 	custom_columns = custom_cursor.keys()
 	custom_cursor.close()
 
+
+    # query 3: crime trend over time
+
+    # set up
+	crime_types = g.conn.execute(text("""
+        SELECT ct.crime_type_id, ct.crime_type, ct.severity, lc.category
+        FROM crimetype ct
+        JOIN lawcategory lc ON lc.law_cat_id = ct.law_cat_id
+        ORDER BY lc.category, ct.crime_type
+    """)).mappings().all()
+
+    # user inputs
+	year_from = request.args.get("year_from")
+	year_to = request.args.get("year_to")
+	crime_type_id = request.args.get("crime_type_id")
+	trend_borough = request.args.get("trend_borough")
+
+	trend_filters = []
+	trend_parameters = {}
+
+	if year_from:
+		trend_filters.append("i.occurred_date >= :year_from")
+		trend_parameters["year_from"] = f"{int(year_from)}-01-01"
+
+	if year_to:
+		trend_filters.append("i.occurred_date <= :year_to")
+		trend_parameters["year_to"] = f"{int(year_to)}-12-31"
+
+	if crime_type_id:
+		trend_filters.append("ct.crime_type_id = :crime_type_id")
+		trend_parameters["crime_type_id"] = crime_type_id
+
+	if trend_borough:
+		trend_filters.append("a.borough = :trend_borough")
+		trend_parameters["trend_borough"] = trend_borough
+
+	if trend_filters:
+		where_clause_trend = "WHERE " + " AND ".join(trend_filters)
+	else:
+		where_clause_trend = ""
+
+
+    # query 3: crime trend over time
+	crime_trend_sql = f"""
+    SELECT 
+        EXTRACT(YEAR FROM i.occurred_date)::INT AS year,
+        COUNT(*) AS num_incidents
+    FROM incident i
+        JOIN classified_as ca ON i.incident_id = ca.incident_id
+        JOIN crimetype ct ON ca.crime_type_id = ct.crime_type_id
+        JOIN address a ON i.address_id = a.address_id
+    {where_clause_trend}
+    GROUP BY year
+    ORDER BY year;
+    """
+
+    # execute query & store results
+	trend_cursor = g.conn.execute(text(crime_trend_sql), trend_parameters)
+	trend_rows = trend_cursor.fetchall()
+	trend_columns = trend_cursor.keys()
+	trend_cursor.close()
+
+
 	return render_template(
         "incidents-analysis.html", 
         rows=rows, columns=columns, window=window, borough=borough, postal_code=postal_code,
-        custom_rows=custom_rows, custom_columns=custom_columns, custom_postal_code=custom_postal_code, custom_gender=custom_gender, custom_age_group=custom_age_group, custom_ethnicity=custom_ethnicity
+        custom_rows=custom_rows, custom_columns=custom_columns, custom_postal_code=custom_postal_code, custom_gender=custom_gender, custom_age_group=custom_age_group, custom_ethnicity=custom_ethnicity,
+        trend_rows=trend_rows, trend_columns=trend_columns, crime_types=crime_types, crime_type_id=crime_type_id, year_from=year_from, year_to=year_to, trend_borough=trend_borough
     )
-
-@app.route('/recommendations')
-def another():
-	return render_template("personalized_rec.html")
-
 
 # Example of adding new data to the database
 @app.route('/add', methods=['POST'])
