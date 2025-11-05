@@ -95,7 +95,6 @@ Areas are sorted by *ascending* match percentage (lower ⇒ safer for the chosen
 For the entered postal code, the same match percentage is computed. The page also shows the raw counts:
     * total incidents,
     * incidents involving the selected demographic,
-
     * the resulting percentage (the “likelihood to become a target” for that profile in that area).
 
 * A categorical risk label is then assigned using simple, explainable thresholds (configurable in code). For example:
