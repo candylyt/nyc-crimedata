@@ -77,31 +77,31 @@ The Personalized Recommendations page turns NYC crime records into guidance tail
 2. Assess Risk in Your Neighborhood.
  Given a postal code (plus optional gender, age group, and race), the page estimates how likely incidents in that area involve someone like the user and assigns a simple Low / Moderate / High risk label.
 
-**How it interacts with the database: **Users can provide any subset of: postal code, gender, age group, and race. (All fields are optional for the Top-10; the postal code is used on the right-hand “Assess Risk” panel.)
+**How it interacts with the database:** Users can provide any subset of: postal code, gender, age group, and race. (All fields are optional for the Top-10; the postal code is used on the right-hand “Assess Risk” panel.)
 
 Queries & Computations:
 
 
 
-* Demographic match rate. \
+* Demographic match rate.
 For each postal code (joined with its borough), the system counts:
     * Total incidents in that area.
     * Matching incidents where at least one victim’s gender/age/race equals the user’s selections (empty fields are treated as “any”). It then computes a match percentage = matching_incidents / total_incidents. \
 
-* Top 10 Safest Areas. \
+* Top 10 Safest Areas.
 Areas are sorted by *ascending* match percentage (lower ⇒ safer for the chosen demographic). Ties at the cutoff are included so no equally ranked area is omitted. To avoid bias from tiny sample sizes, the query can optionally require a minimum incident count; when enabled, areas below the threshold are excluded from ranking. \
 
-* Neighborhood Risk (by postal code). \
+* Neighborhood Risk (by postal code).
 For the entered postal code, the same match percentage is computed. The page also shows the raw counts:
     * total incidents,
-    * incidents involving the selected demographic, \
+    * incidents involving the selected demographic,
 
-    * the resulting percentage (the “likelihood to become a target” for that profile in that area). \
+    * the resulting percentage (the “likelihood to become a target” for that profile in that area).
 
 * A categorical risk label is then assigned using simple, explainable thresholds (configurable in code). For example:
     * Low: match % ≤ 10%
     * Moderate: 10% &lt; match % ≤ 25%
-    * High: match % > 25% \
+    * High: match % > 25%
 
 * These thresholds are intentionally transparent and can be tuned as the team sees fit.
 
