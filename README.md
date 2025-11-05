@@ -4,7 +4,7 @@
 
 **PostgreSQL Account:** yl5961
 
-**URL of the Web Application: **http://34.148.79.232:8111/
+**URL of the Web Application:** http://34.148.79.232:8111/
 
 (note: do not turn off the virtual machine so that the external IP address remains the same)
 
@@ -14,22 +14,20 @@ For general users
 
 
 
-- [ ] **Exploration & Search**: Users can browse historical crime records and filter results by categories such as date of occurrence, gender of victim, crime type, law category, and etc, enabling them to explore safety trends in neighborhoods of interest.
-- [ ] **Personalized Risk Assessment**: By entering personal information (e.g., gender, race, age group), users can receive tailored recommendations on safer neighborhoods. Alternatively, they can provide a postal code and receive an assessment on whether the area is recommended for their demographic profile.
+* **Exploration & Search**: Users can browse historical crime records and filter results by categories such as date of occurrence, gender of victim, crime type, law category, and etc, enabling them to explore safety trends in neighborhoods of interest.
+* **Personalized Risk Assessment**: By entering personal information (e.g., gender, race, age group), users can receive tailored recommendations on safer neighborhoods. Alternatively, they can provide a postal code and receive an assessment on whether the area is recommended for their demographic profile.
 
 For administrators
 
 
 
-- [ ] **Reporting**: Admins can submit new reports of incidents, including associated suspects and victims. 
-    - [ ] Admins should also be able to add new victims & suspects for the existing incidents
-- [ ] **Incident Management**: Admins can update the status and details of reported incidents, such as changing an incident’s status from Open to Closed, or modifying suspect arrest status.
-- [ ] **Data Integrity**: Admins can remove incidents flagged as false reports to maintain the reliability of the database.
-- [ ] **System Expansion**: Admins can create new crime types, and jurisdictions. 
-
-	(Note: We removed the law categories from the proposal as we believe that this shall not 
-
-be changed in real life)
+* **Reporting**: Admins can submit new reports of incidents, including associated suspects and victims. 
+    * Admins should also be able to add new victims & suspects for the existing incidents
+* **Incident Management**: Admins can update the status and details of reported incidents, such as changing an incident’s status from Open to Closed, or modifying suspect arrest status.
+* **Data Integrity**: Admins can remove incidents flagged as false reports to maintain the reliability of the database.
+* **System Expansion**: Admins can create new crime types, and jurisdictions. 
+    * (Note: We removed the law categories from the proposal as we believe that this shall not 
+    * be changed in real life)
 
 *All features proposed in part 1 are implemented.
 
@@ -39,10 +37,10 @@ For general users
 
 
 
-- [ ] **Incident Analysis**: The Incident Analysis module allows users to explore key crime trends and demographic insights from the most recent database.
-    - [ ] Users can view the **Top 10 Crime Types** (ranked by the number of incidents) across New York City or within a specific borough, based on the selected time window — such as the past 90 days, 1, 3, 5, or 10 years, or the complete dataset dating back to 1981.
-    - [ ] Users can analyze **crime type distributions** within a particular postal code based on victim demographics — including gender, race, and age group. This enables users to identify which crime types are more prevalent for individuals with similar profiles in their area, offering a personalized understanding of local safety risks.
-    - [ ] Users can explore the **crime trend over time**, visualizing how the total number of incidents has evolved from 1981 to 2025. Users can specify a custom range of years, select a particular crime type, and filter by borough to focus on trends relevant to their interests or regions of concern.
+* **Incident Analysis**: The Incident Analysis module allows users to explore key crime trends and demographic insights from the most recent database.
+    * Users can view the **Top 10 Crime Types** (ranked by the number of incidents) across New York City or within a specific borough, based on the selected time window — such as the past 90 days, 1, 3, 5, or 10 years, or the complete dataset dating back to 1981.
+    * Users can analyze **crime type distributions** within a particular postal code based on victim demographics — including gender, race, and age group. This enables users to identify which crime types are more prevalent for individuals with similar profiles in their area, offering a personalized understanding of local safety risks.
+    * Users can explore the **crime trend over time**, visualizing how the total number of incidents has evolved from 1981 to 2025. Users can specify a custom range of years, select a particular crime type, and filter by borough to focus on trends relevant to their interests or regions of concern.
 
 **Interesting Web Pages**
 
@@ -74,9 +72,9 @@ The Personalized Recommendations page turns NYC crime records into guidance tail
 
 
 
-1. Find the Top 10 Safest Areas (for your demographic). \
+1. Find the Top 10 Safest Areas (for your demographic).
  Given a gender, age group, and race, the page ranks postal-code/borough pairs by how *rarely* incidents in that area involve people (i.e., victim) matching that demographic.
-2. Assess Risk in Your Neighborhood. \
+2. Assess Risk in Your Neighborhood.
  Given a postal code (plus optional gender, age group, and race), the page estimates how likely incidents in that area involve someone like the user and assigns a simple Low / Moderate / High risk label.
 
 **How it interacts with the database: **Users can provide any subset of: postal code, gender, age group, and race. (All fields are optional for the Top-10; the postal code is used on the right-hand “Assess Risk” panel.)
