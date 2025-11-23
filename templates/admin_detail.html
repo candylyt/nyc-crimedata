@@ -133,9 +133,29 @@
       {% if suspects %}
         <ul class="clean">
           {% for s in suspects %}
-            <li class="item">
-              <strong>#{{ s.suspect_id }}</strong> — {{ s.gender or '?' }}/{{ s.race or '?' }}, {{ s.age_grp or '?' }},
-              Arrested: <strong>{{ 'Yes' if s.arrest_status else 'No' }}</strong>
+            <li class="item" style="margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid #eee;">
+              <div style="margin-bottom: 6px;">
+                <strong>#{{ s.suspect_id }}</strong> — {{ s.gender or '?' }}/{{ s.race or '?' }}, {{ s.age_grp or '?' }},
+                Arrested: <strong>{{ 'Yes' if s.arrest_status else 'No' }}</strong>
+              </div>
+              
+              <!-- Weapons display and edit -->
+              <div style="margin-bottom: 6px;">
+                <strong>Weapons:</strong> 
+                {% if s.weapons %}
+                  {{ s.weapons | join(', ') }}
+                {% else %}
+                  <em>(none)</em>
+                {% endif %}
+                <form method="post" class="inline-form" style="margin-left: 10px;">
+                  <input type="hidden" name="action" value="update_suspect_weapons">
+                  <input type="hidden" name="suspect_id" value="{{ s.suspect_id }}">
+                  <input type="text" name="weapons" placeholder="e.g., knife, gun" 
+                         value="{{ s.weapons | join(', ') if s.weapons else '' }}" 
+                         class="sm" style="min-width: 200px;">
+                  <button type="submit" class="sm">Update Weapons</button>
+                </form>
+              </div>
 
               <!-- compact arrest toggle -->
               <form method="post" class="inline-form">
@@ -268,6 +288,62 @@
             <button type="submit" class="sm">Add Victim</button>
           </form>
         </div>
+      </div>
+    </div>
+
+    <!-- Suspect Clues (Full-text search) -->
+    <div class="card">
+      <h3>Suspect Clues (Full-text Search)</h3>
+      <p class="help">Rich narrative descriptions (e.g., clothing, tattoos, speech patterns) for full-text search.</p>
+      
+      {% if suspect_clues %}
+        <ul class="clean">
+          {% for clue in suspect_clues %}
+            <li class="item" style="margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid #eee;">
+              <div style="margin-bottom: 6px;">
+                <strong>Clue #{{ clue.clue_id }}</strong> (Suspect #{{ clue.suspect_id }})
+              </div>
+              <div style="margin-bottom: 6px;">
+                <strong>Text:</strong> {{ clue.clue_text }}
+              </div>
+              <form method="post" style="display: inline-block; margin-right: 8px;">
+                <input type="hidden" name="action" value="update_suspect_clue">
+                <input type="hidden" name="clue_id" value="{{ clue.clue_id }}">
+                <textarea name="clue_text" rows="2" style="width: 400px; font-size: 14px;">{{ clue.clue_text }}</textarea>
+                <button type="submit" class="sm">Update</button>
+              </form>
+              <form method="post" style="display: inline-block;" onsubmit="return confirm('Delete this clue?');">
+                <input type="hidden" name="action" value="delete_suspect_clue">
+                <input type="hidden" name="clue_id" value="{{ clue.clue_id }}">
+                <button type="submit" class="sm btn-danger">Delete</button>
+              </form>
+            </li>
+          {% endfor %}
+        </ul>
+      {% else %}
+        <p class="help">(No clues recorded)</p>
+      {% endif %}
+
+      <div style="margin-top: 10px;">
+        <h4 style="margin: 0 0 6px;">Add Clue</h4>
+        <form method="post">
+          <input type="hidden" name="action" value="add_suspect_clue">
+          <div class="row" style="margin-bottom: 8px;">
+            <label class="label">Suspect:</label>
+            <select name="suspect_id" class="sm" required>
+              <option value="">(select suspect)</option>
+              {% for s in suspects %}
+                <option value="{{ s.suspect_id }}">Suspect #{{ s.suspect_id }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div style="margin-bottom: 8px;">
+            <label class="label">Clue Text:</label>
+            <textarea name="clue_text" rows="3" style="width: 100%; font-size: 14px;" 
+                      placeholder="e.g., Wearing red hoodie, has dragon tattoo on left arm, speaks with Brooklyn accent" required></textarea>
+          </div>
+          <button type="submit" class="sm">Add Clue</button>
+        </form>
       </div>
     </div>
   </body>

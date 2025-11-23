@@ -245,7 +245,7 @@ def admin_incident_detail(incident_id):
 
     # Related rows
     suspects = g.conn.execute(text("""
-        SELECT suspect_id, gender, race, age_grp, arrest_status
+        SELECT suspect_id, gender, race, age_grp, arrest_status, weapons
         FROM suspect
         WHERE incident_id = :incident_id
         ORDER BY suspect_id
@@ -256,6 +256,14 @@ def admin_incident_detail(incident_id):
         FROM victim
         WHERE incident_id = :incident_id
         ORDER BY victim_id
+    """), {"incident_id": incident_id}).mappings().all()
+
+    # Suspect clues with full-text search support
+    suspect_clues = g.conn.execute(text("""
+        SELECT sc.clue_id, sc.suspect_id, sc.clue_text, sc.clue_tsv
+        FROM suspect_clue sc
+        WHERE sc.incident_id = :incident_id
+        ORDER BY sc.clue_id
     """), {"incident_id": incident_id}).mappings().all()
 
     if request.method == "POST":
@@ -356,6 +364,90 @@ def admin_incident_detail(incident_id):
 
             return redirect(url_for("admin_incident_detail", incident_id=incident_id))
 
+        # 7) Update suspect weapons array
+        if action == "update_suspect_weapons":
+            sid = request.form.get("suspect_id")
+            weapons_str = (request.form.get("weapons") or "").strip()
+            if sid:
+                # Parse comma-separated weapons into array
+                weapons_list = [w.strip() for w in weapons_str.split(",") if w.strip()] if weapons_str else []
+                g.conn.execute(text("""
+                    UPDATE suspect
+                    SET weapons = :weapons
+                    WHERE incident_id = :iid AND suspect_id = :sid
+                """), {
+                    "weapons": weapons_list if weapons_list else None,
+                    "iid": incident_id,
+                    "sid": int(sid)
+                })
+                g.conn.commit()
+                flash("Suspect weapons updated.", "success")
+            return redirect(url_for("admin_incident_detail", incident_id=incident_id))
+
+        # 8) Add suspect clue
+        if action == "add_suspect_clue":
+            sid = request.form.get("suspect_id")
+            clue_text = (request.form.get("clue_text") or "").strip()
+            if sid and clue_text:
+                # Verify suspect belongs to this incident
+                suspect_check = g.conn.execute(text("""
+                    SELECT 1 FROM suspect 
+                    WHERE suspect_id = :sid AND incident_id = :iid
+                """), {"sid": int(sid), "iid": incident_id}).first()
+                if suspect_check:
+                    # Trigger will automatically populate clue_tsv
+                    g.conn.execute(text("""
+                        INSERT INTO suspect_clue (incident_id, suspect_id, clue_text)
+                        VALUES (:iid, :sid, :clue_text)
+                    """), {
+                        "iid": incident_id,
+                        "sid": int(sid),
+                        "clue_text": clue_text
+                    })
+                    g.conn.commit()
+                    flash("Suspect clue added.", "success")
+                else:
+                    flash("Invalid suspect for this incident.", "error")
+            else:
+                flash("Please provide both suspect and clue text.", "error")
+            return redirect(url_for("admin_incident_detail", incident_id=incident_id))
+
+        # 9) Update suspect clue
+        if action == "update_suspect_clue":
+            clue_id = request.form.get("clue_id")
+            clue_text = (request.form.get("clue_text") or "").strip()
+            if clue_id and clue_text:
+                # Trigger will automatically update clue_tsv
+                g.conn.execute(text("""
+                    UPDATE suspect_clue
+                    SET clue_text = :clue_text
+                    WHERE clue_id = :clue_id AND incident_id = :iid
+                """), {
+                    "clue_text": clue_text,
+                    "clue_id": int(clue_id),
+                    "iid": incident_id
+                })
+                g.conn.commit()
+                flash("Suspect clue updated.", "success")
+            else:
+                flash("Please provide clue text.", "error")
+            return redirect(url_for("admin_incident_detail", incident_id=incident_id))
+
+        # 10) Delete suspect clue
+        if action == "delete_suspect_clue":
+            clue_id = request.form.get("clue_id")
+            if clue_id:
+                g.conn.execute(text("""
+                    DELETE FROM suspect_clue
+                    WHERE clue_id = :clue_id AND incident_id = :iid
+                """), {
+                    "clue_id": int(clue_id),
+                    "iid": incident_id
+                })
+                g.conn.commit()
+                flash("Suspect clue deleted.", "success")
+            return redirect(url_for("admin_incident_detail", incident_id=incident_id))
+
         # If we get here, unknown action; just bounce back.
         flash("Unknown action.", "error")
         return redirect(url_for("admin_incident_detail", incident_id=incident_id))
@@ -366,6 +458,7 @@ def admin_incident_detail(incident_id):
         incident=incident,
         suspects=suspects,
         victims=victims,
+        suspect_clues=suspect_clues,
     )
 
 
